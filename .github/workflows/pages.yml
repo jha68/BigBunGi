@@ -51,8 +51,7 @@ jobs:
     steps:
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
-        with:
-          enablement: true
+        # The repository owner enabled Pages. Do not attempt an admin-only create.
       - name: Publish
         id: deployment
         uses: actions/deploy-pages@v4
