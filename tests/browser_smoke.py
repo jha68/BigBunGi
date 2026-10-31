@@ -87,7 +87,8 @@ async def main():
         await execute('import pandas as pd\npd.read_csv("data/customers.csv").head(3)')
         assert await page.locator('.console-output tbody tr').count()==3
 
-        for kind,count in [(1,10),(2,3),(3,3)]:
+        curriculum=[(1,1)] if os.environ.get('BROWSER_MODE')=='quick' else [(1,10),(2,3),(3,3)]
+        for kind,count in curriculum:
             for number in range(1,count+1):
                 pid=f't{kind}-{number:02d}'
                 if kind!=int((await page.locator('.problem-kicker .badge').inner_text())[4]):
@@ -104,7 +105,8 @@ async def main():
                 assert '정답입니다' in text,(pid,text)
                 print('BROWSER PASS:',pid,text.splitlines()[0],flush=True)
                 if kind==2:await page.screenshot(path=f'/tmp/bigbungi-{pid}.png',full_page=True)
-        assert '16 / 16' in await page.locator('.progress-caption strong').inner_text()
+        expected=sum(count for _,count in curriculum)
+        assert f'{expected} / 16' in await page.locator('.progress-caption strong').inner_text()
         await page.screenshot(path='/tmp/bigbungi-complete.png',full_page=True)
         await execute('import matplotlib\nmatplotlib.use("Agg")\nimport matplotlib.pyplot as plt\nplt.plot([1,2,3],[1,4,9])\nplt.title("Real Python plot")\nplt.show()')
         assert await page.locator('.result-plot').count()==1
@@ -120,7 +122,7 @@ async def main():
         await check_mobile()
         assert not page_errors,page_errors
         await browser.close()
-        print('All 16 browser reference executions, grading, data preview, notes, errors, worker stop and mobile layout passed.',flush=True)
+        print(f'{expected} browser reference executions, grading, data preview, notes, errors, worker stop and mobile layout passed.',flush=True)
 
 
 if __name__=='__main__':asyncio.run(main())

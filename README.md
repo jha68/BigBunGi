@@ -72,8 +72,7 @@ CHROMIUM_PATH=/usr/bin/chromium .venv/bin/python tests/browser_smoke.py
 1. 고정 버전 Python·Node 환경에서 원본 데이터와 정답 생성.
 2. Python 문제·모델 검증 및 JavaScript 채점 검증.
 3. Vite 빌드 후 GitHub Pages 아티팩트 배포.
-4. Pages의 사용자 지정 도메인을 `bigbungi.junununseo.com`으로 설정.
-5. TLS 인증서가 준비되면 HTTPS 강제 적용. 인증서 준비가 늦으면 워크플로에 안내를 남기며 이후 Pages 설정에서 Enforce HTTPS를 활성화합니다.
+4. Pages의 도메인 설정을 확인하고, 공개 HTTPS 주소의 HTML·스크립트·Python worker·16문제 카탈로그를 실제 요청으로 검증.
 
 Cloudflare DNS 레코드는 다음과 같습니다. DNS 레코드를 직접 설정한 경우 Cloudflare API 토큰은 필요하지 않습니다.
 
@@ -81,7 +80,7 @@ Cloudflare DNS 레코드는 다음과 같습니다. DNS 레코드를 직접 설�
 |---|---|---|---|
 | CNAME | `bigbungi` | `jha68.github.io` | DNS 전용 |
 
-저장소 Pages 설정의 Source는 GitHub Actions입니다. 최초 Pages 활성화 권한이 거부되면 저장소 관리자가 Settings → Pages에서 GitHub Actions를 선택한 뒤 실패한 워크플로를 다시 실행합니다. DNS 전파와 GitHub의 인증서 발급은 별도로 시간이 걸릴 수 있습니다.
+저장소 관리자는 Settings → Pages에서 Source를 GitHub Actions로 선택하고 Custom domain에 `bigbungi.junununseo.com`을 저장합니다. 이 관리 설정은 GitHub 기본 배포 토큰으로 수정할 수 없습니다. 인증서 발급 후 Enforce HTTPS를 활성화합니다. DNS 전파와 인증서 발급은 별도로 시간이 걸릴 수 있습니다. 상대 경로로 빌드하므로 기본 주소 `https://jha68.github.io/BigBunGi/`와 사용자 지정 도메인에서 모두 실행할 수 있습니다.
 
 ## 파일 구성
 

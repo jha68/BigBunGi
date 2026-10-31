@@ -55,55 +55,44 @@ jobs:
       - name: Publish
         id: deployment
         uses: actions/deploy-pages@v4
-      - name: Connect custom domain
+      - name: Check domain configuration
+        id: domain
         uses: actions/github-script@v7
         with:
           script: |
-            await github.request('PUT /repos/{owner}/{repo}/pages', {
-              ...context.repo,
-              cname: 'bigbungi.junununseo.com'
-            });
-      - name: Enable HTTPS when certificate is available
-        uses: actions/github-script@v7
-        with:
-          script: |
-            for (let attempt = 0; attempt < 8; attempt++) {
-              try {
-                await github.request('PUT /repos/{owner}/{repo}/pages', {
-                  ...context.repo,
-                  https_enforced: true
-                });
-                core.info('HTTPS enforcement enabled.');
-                return;
-              } catch (error) {
-                if (error.status !== 422) throw error;
-                core.info('GitHub Pages certificate is being provisioned.');
-                await new Promise(resolve => setTimeout(resolve, 15000));
-              }
+            const { data: site } = await github.request('GET /repos/{owner}/{repo}/pages', context.repo);
+            const connected = site.cname === 'bigbungi.junununseo.com';
+            core.setOutput('connected', connected ? 'true' : 'false');
+            core.setOutput('url', site.html_url);
+            if (connected) {
+              core.notice('Custom domain configured: ' + site.cname + '; HTTPS enforcement: ' + site.https_enforced);
+            } else {
+              core.warning('Application published. Repository owner must save bigbungi.junununseo.com in Settings > Pages > Custom domain.');
             }
-            core.warning('Domain connected. TLS certificate is still provisioning; enable Enforce HTTPS in Pages settings after certificate issuance.');
       - name: Verify the public HTTPS application
         uses: actions/github-script@v7
         with:
           script: |
-            const origin = 'https://bigbungi.junununseo.com';
+            const customDomain = '${{ steps.domain.outputs.connected }}' === 'true';
+            const origin = customDomain ? 'https://bigbungi.junununseo.com/' : '${{ steps.domain.outputs.url }}';
+            const endpoint = path => new URL(path, origin).href;
             let failure;
             for (let attempt = 0; attempt < 20; attempt++) {
               try {
                 const options = () => ({ signal: AbortSignal.timeout(12000) });
-                const page = await fetch(origin + '/', options());
+                const page = await fetch(origin, options());
                 if (!page.ok) throw new Error('App HTTP status: ' + page.status);
                 const html = await page.text();
                 if (!html.includes('빅분기')) throw new Error('Unexpected app HTML');
-                const response = await fetch(origin + '/content/catalog.json', options());
+                const response = await fetch(endpoint('content/catalog.json'), options());
                 if (!response.ok) throw new Error('Catalog HTTP status: ' + response.status);
                 const catalog = await response.json();
                 const counts = [1, 2, 3].map(type => catalog.filter(p => p.type === type).length);
                 if (counts.join(',') !== '10,3,3') throw new Error('Unexpected exercise counts: ' + counts);
                 const assets = [...html.matchAll(/(?:src|href)="([^"]+\.(?:js|css))"/g)].map(match => match[1]);
                 if (!assets.length) throw new Error('Built assets missing from HTML');
-                for (const path of [...assets, '/python-worker.js', '/content/problems/t1-01.json']) {
-                  const asset = await fetch(new URL(path, origin), options());
+                for (const path of [...assets, 'python-worker.js', 'content/problems/t1-01.json']) {
+                  const asset = await fetch(endpoint(path), options());
                   if (!asset.ok) throw new Error('Missing application asset: ' + path);
                 }
                 core.notice('LIVE VERIFIED: HTTPS 200, application assets, Python worker, and 16 exercises (10/3/3) at ' + origin);
