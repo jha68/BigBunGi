@@ -1015,7 +1015,7 @@ h1 > span {
   color: #b7c9df !important;
 }
 .cm-editor .cm-activeLine {
-  background: #223146 !important;
+  background: #344b6838 !important;
 }
 .cm-editor .cm-line {
   padding-left: 8px;
@@ -1024,7 +1024,16 @@ h1 > span {
   border-left-color: #71d0be !important;
 }
 .cm-editor .cm-selectionBackground {
-  background: #354e6b !important;
+  background: #3c6699 !important;
+  box-shadow: inset 0 0 0 1px #94c7ff;
+}
+.cm-editor.cm-focused .cm-selectionBackground {
+  background: #356fac !important;
+  box-shadow: inset 0 0 0 1px #acd5ff;
+}
+.cm-editor:not(.cm-focused) .cm-content ::selection {
+  background: #3c6699;
+  color: #fff;
 }
 .cm-editor.cm-focused {
   outline: none;
@@ -1555,15 +1564,20 @@ tr:nth-child(even) {
   gap: 5px;
 }
 .reference-code {
-  font-size: 10px;
-  line-height: 1.9;
-  background: #f4f7fa;
-  border: 1px solid #e3eaf2;
-  padding: 12px;
+  margin-top: 12px;
+  background: #1b283a;
+  border: 1px solid #314259;
   border-radius: 6px;
-  color: #617b8d;
-  overflow: auto;
-  tab-size: 4;
+  overflow: hidden;
+}
+.reference-code .cm-editor {
+  height: auto;
+}
+.reference-code .cm-scroller {
+  max-height: 560px;
+}
+.reference-code .cm-activeLine {
+  background: transparent !important;
 }
 .submission-contract {
   background: #f6f9fb;

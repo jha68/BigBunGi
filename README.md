@@ -10,6 +10,7 @@
 - **2유형 3문제:** 이진분류(ROC AUC), 회귀(RMSE), 다중분류(Macro F1). 결측치·범주형·잡음이 있는 학습/평가 데이터와 CSV 제출 채점.
 - **3유형 3문제:** 대응·단일표본 t-검정, ANOVA, 상관분석, OLS, 카이제곱, 비벌점 로지스틱 회귀, 오즈비·민감도.
 - 코드 편집기, `Ctrl/Cmd+Enter` 실행, stdout·경고·Python traceback, 데이터프레임·그래프 표시, 실행 중지와 60초 제한.
+- 선택 영역의 파란색 강조·테두리, 줄 번호·Python 문법 강조·자동 줄바꿈이 있는 읽기 전용 기준 풀이.
 - 데이터 미리보기·변수 설명·CSV 다운로드, 단계별 힌트, 기준 풀이, 풀이 노트, 진행률, 180분 타이머, 모바일 화면.
 - 코드·노트·진행률은 브라우저의 localStorage에 자동 저장됩니다. 다른 기기·브라우저로 동기화되지는 않습니다.
 
@@ -53,6 +54,8 @@ npm run preview -- --port 4173 --strictPort
 
 ```sh
 CHROMIUM_PATH=/usr/bin/chromium .venv/bin/python tests/browser_smoke.py
+# Ctrl/Cmd+Enter, 드래그 선택 강조, 읽기 전용 해설의 문법 강조 검증
+CHROMIUM_PATH=/usr/bin/chromium .venv/bin/python tests/browser_editor.py
 ```
 
 실제 WebAssembly Python에서 16개 기준 풀이를 실행하고 채점하며 오류·DataFrame·그래프·중지·자동 저장·모바일 탐색을 검증합니다. 클라우드 프록시의 CA를 Chromium이 신뢰하지 않는 경우 테스트는 Python의 검증된 TLS 전송으로 CDN만 연결합니다. TLS 및 Pyodide 패키지 해시 검증은 유지합니다.

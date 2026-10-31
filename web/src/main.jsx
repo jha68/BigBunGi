@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { EditorView, basicSetup } from "codemirror";
+import { EditorState, Prec } from "@codemirror/state";
+import { keymap } from "@codemirror/view";
 import { python } from "@codemirror/lang-python";
 import { oneDark } from "@codemirror/theme-one-dark";
 import {
@@ -81,7 +83,13 @@ async function jsonFile(path) {
   return r.json();
 }
 
-function CodeEditor({ value, onChange, onRun, fontSize }) {
+function CodeEditor({
+  value,
+  onChange,
+  onRun,
+  fontSize = 13,
+  readOnly = false,
+}) {
   const host = useRef(null),
     view = useRef(null),
     change = useRef(onChange),
@@ -92,25 +100,38 @@ function CodeEditor({ value, onChange, onRun, fontSize }) {
     view.current = new EditorView({
       doc: value,
       extensions: [
+        // basicSetup binds Mod-Enter to insertBlankLine. Our run command must
+        // take precedence over that keymap on Windows, Linux and macOS.
+        ...(readOnly
+          ? []
+          : [
+              Prec.highest(
+                keymap.of(
+                  ["Mod-Enter", "Ctrl-Enter"].map((key) => ({
+                    key,
+                    run: () => {
+                      run.current?.();
+                      return true;
+                    },
+                    preventDefault: true,
+                  })),
+                ),
+              ),
+            ]),
         basicSetup,
         python(),
         oneDark,
+        EditorState.readOnly.of(readOnly),
+        EditorView.editable.of(!readOnly),
+        ...(readOnly ? [EditorView.lineWrapping] : []),
         EditorView.contentAttributes.of({
-          "aria-label": "Python 코드 편집기",
+          "aria-label": readOnly ? "Python 기준 풀이" : "Python 코드 편집기",
+          "aria-readonly": String(readOnly),
+          ...(readOnly ? { tabindex: "0" } : {}),
           spellcheck: "false",
         }),
         EditorView.updateListener.of((update) => {
-          if (update.docChanged) change.current(update.state.doc.toString());
-        }),
-        EditorView.domEventHandlers({
-          keydown(event) {
-            if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-              event.preventDefault();
-              run.current();
-              return true;
-            }
-            return false;
-          },
+          if (update.docChanged) change.current?.(update.state.doc.toString());
         }),
       ],
       parent: host.current,
@@ -127,7 +148,7 @@ function CodeEditor({ value, onChange, onRun, fontSize }) {
   return (
     <div
       ref={host}
-      className="code-editor"
+      className={readOnly ? "reference-code" : "code-editor"}
       style={{ "--code-font-size": `${fontSize}px` }}
     />
   );
@@ -414,7 +435,15 @@ function App() {
   }
   async function runCode() {
     const p = problemRef.current;
-    if (!p || !runtime.ready || runMeta.current) return;
+    if (!p || runMeta.current) return;
+    if (!runtime.ready) {
+      notify(
+        runtime.error
+          ? "실행 환경을 다시 시작한 뒤 코드를 실행해 주세요."
+          : "Python 실행 환경을 준비 중입니다. 준비가 끝나면 다시 실행해 주세요.",
+      );
+      return;
+    }
     const source = codeRef.current;
     runMeta.current = { id: p.id, code: source };
     setRunning({ id: p.id, stage: "데이터 준비 중…" });
@@ -1081,9 +1110,12 @@ function App() {
                           <ArrowRight size={13} />
                         </button>
                       </div>
-                      <pre className="reference-code">
-                        {solutions[selected].code}
-                      </pre>
+                      <CodeEditor
+                        key={`solution-${selected}`}
+                        value={solutions[selected].code}
+                        fontSize={12}
+                        readOnly
+                      />
                     </>
                   )}
                 </div>
