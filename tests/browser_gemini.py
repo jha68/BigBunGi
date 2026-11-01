@@ -22,6 +22,8 @@ async def main():
         errors, requests = [], []
         release = asyncio.Event()
         quota_once = False
+        note_attempts = 0
+        note_release = asyncio.Event()
         headers = {"access-control-allow-origin": "*", "access-control-allow-headers": "content-type,x-goog-api-key", "access-control-allow-methods": "GET,POST,OPTIONS"}
 
         async def cdn(route):
@@ -29,7 +31,7 @@ async def main():
             await route.fulfill(status=200, body=body, content_type=kind, headers={"access-control-allow-origin": "*"})
 
         async def gemini(route):
-            nonlocal quota_once
+            nonlocal quota_once, note_attempts
             req = route.request
             if req.method == "OPTIONS":
                 await route.fulfill(status=204, headers=headers); return
@@ -48,7 +50,14 @@ async def main():
             else:
                 payload = req.post_data_json
                 question = payload["contents"][-1]["parts"][-1]["text"]
-                if "할당량 테스트" in question and not quota_once:
+                if "지금은 대화 답변이 아니라 학습자의 복습 노트" in json.dumps(payload, ensure_ascii=False):
+                    note_attempts += 1
+                    if note_attempts == 1:
+                        status, body = 429, {"error": {"message": "quota exceeded"}}
+                    else:
+                        await note_release.wait()
+                        body = {"candidates": [{"content": {"parts": [{"text": "## AI 복습 정리\n표준편차 ddof와 오류 원인을 복습하세요.\n\n```python\nprint('review')\n```"}]}, "finishReason": "STOP"}]}
+                elif "할당량 테스트" in question and not quota_once:
                     quota_once = True
                     status, body = 429, {"error": {"message": "quota exceeded"}}
                 else:
@@ -158,6 +167,47 @@ async def main():
         assert await page.locator(".gemini-turn").count() == 2
         print("PASS: conversations and contexts remain separate when changing problems.", flush=True)
 
+        # Notes use the same selected model and key, with no second settings form.
+        await page.get_by_role("button", name="Gemini 연결 설정", exact=True).click()
+        await page.locator("#gemini-model").select_option("models/gemini-2.5-pro")
+        await page.get_by_role("button", name="설정 접기", exact=True).click()
+        await page.get_by_role("tab", name="노트", exact=True).click()
+        assert await page.locator("#gemini-model:visible, #gemini-key:visible").count() == 0
+        await page.get_by_role("textbox", name="풀이 노트", exact=True).fill("직접 작성한 메모")
+        await page.get_by_role("button", name="AI 대화로 노트 생성", exact=True).click()
+        await page.wait_for_selector(".note-ai [role=alert]")
+        assert "사용 한도" in await page.locator(".note-ai [role=alert]").inner_text()
+        assert await page.get_by_role("textbox", name="풀이 노트", exact=True).input_value() == "직접 작성한 메모"
+        await page.get_by_role("button", name="AI 대화로 노트 생성", exact=True).click()
+        await page.get_by_role("button", name="노트 생성 중지", exact=True).wait_for()
+        await page.get_by_role("textbox", name="풀이 노트", exact=True).fill("생성 중 수정한 메모")
+        await page.locator(".question-link").nth(1).click()
+        await page.get_by_role("tab", name="노트", exact=True).click()
+        assert not await page.locator(".note-ai-preview").count()
+        await page.get_by_role("textbox", name="풀이 노트", exact=True).fill("두 번째 문제 메모")
+        note_release.set()
+        await page.locator(".question-link").nth(0).click()
+        await page.get_by_role("tab", name="노트", exact=True).click()
+        await page.wait_for_selector(".note-ai-preview")
+        sent_note = [r for r in requests if r["body"]][-1]
+        assert sent_note["url"].endswith("models/gemini-2.5-pro:generateContent")
+        assert sent_note["key"] == KEY
+        note_data = json.loads(sent_note["body"]["contents"][0]["parts"][0]["text"])
+        assert len(note_data["conversations"]) == 2
+        assert note_data["context"]["problem"]["id"] == "t1-01"
+        assert "두 번째 문제 힌트" not in json.dumps(note_data,ensure_ascii=False)
+        await page.get_by_role("button", name="내 노트에 추가", exact=True).click()
+        note = await page.get_by_role("textbox", name="풀이 노트", exact=True).input_value()
+        assert note.startswith("생성 중 수정한 메모\n\n## AI 복습 정리")
+        assert not await page.locator(".note-ai-preview").count()
+        await page.locator(".question-link").nth(1).click()
+        await page.get_by_role("tab", name="노트", exact=True).click()
+        assert await page.get_by_role("textbox", name="풀이 노트", exact=True).input_value() == "두 번째 문제 메모"
+        await page.locator(".question-link").nth(0).click()
+        await page.get_by_role("tab", name="AI 질문", exact=True).click()
+        assert await page.locator(".gemini-turn").count() == 2
+        print("PASS: AI notes share model/key, include only this problem's completed chats, handle quota and preserve concurrent edits across navigation.", flush=True)
+
         await page.get_by_role("textbox", name="Gemini에게 질문", exact=True).fill("중지 테스트")
         await page.get_by_role("button", name="Gemini 질문 보내기").click()
         await page.get_by_role("button", name="Gemini 응답 중지").click()
@@ -174,7 +224,10 @@ async def main():
         stored = await page.evaluate("JSON.stringify({...localStorage}) + JSON.stringify({...sessionStorage})")
         assert KEY not in stored, "API key persisted in browser storage"
         await page.reload(wait_until="networkidle")
-        await page.get_by_role("tab", name="AI 질문", exact=True).click()
+        await page.get_by_role("tab", name="노트", exact=True).click()
+        assert await page.get_by_role("textbox", name="풀이 노트", exact=True).input_value() == note
+        assert await page.get_by_role("button", name="AI 대화로 노트 생성", exact=True).is_disabled()
+        await page.get_by_role("button", name="AI 질문에서 키와 모델 연결하기", exact=True).click()
         assert await page.locator("#gemini-key").input_value() == ""
         assert await page.get_by_role("button", name="Gemini 질문 보내기").is_disabled()
         await page.screenshot(path="/tmp/bigbungi-gemini-key-setup-mobile.png", full_page=True)

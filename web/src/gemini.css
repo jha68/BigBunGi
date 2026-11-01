@@ -615,3 +615,64 @@
     font-size: 8px;
   }
 }
+
+.note-ai {
+  border: 1px solid #d7e5ef;
+  border-radius: 8px;
+  background: #f7fafc;
+  padding: 14px;
+  margin-bottom: 22px;
+  font-size: 11px;
+  color: #536880;
+}
+.note-ai-heading,
+.note-ai-heading strong,
+.note-ai-actions,
+.note-ai-generate {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+.note-ai-heading {
+  justify-content: space-between;
+}
+.note-ai p {
+  line-height: 1.8;
+}
+.note-ai small {
+  display: block;
+  line-height: 1.8;
+  color: #718198;
+}
+.note-ai button {
+  border: 1px solid #ccdce8;
+  border-radius: 5px;
+  padding: 7px 10px;
+  background: white;
+  color: #285d82;
+  font-size: 11px;
+  cursor: pointer;
+}
+.note-ai button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.note-ai .note-ai-link {
+  margin-top: 8px;
+}
+.note-ai-preview {
+  border-top: 1px solid #d7e5ef;
+  margin-top: 14px;
+  padding-top: 14px;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.note-ai-actions {
+  margin-top: 12px;
+}
+.note-ai-actions button:first-child,
+.note-ai .note-ai-generate {
+  background: #edf6fc;
+  border-color: #bed7e9;
+}

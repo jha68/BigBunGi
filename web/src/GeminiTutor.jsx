@@ -66,6 +66,7 @@ export function GeminiProvider({ children }) {
   const [turns, setTurns] = useState({}),
     [drafts, setDrafts] = useState({});
   const [pending, setPending] = useState(null);
+  const [noteGenerations, setNoteGenerations] = useState({});
   const activeKey = useRef(""),
     request = useRef(null),
     connecting = useRef(null);
@@ -223,6 +224,58 @@ export function GeminiProvider({ children }) {
       }
     }
   }
+  async function generateNote({ problem, code, result }) {
+    if (request.current || connection.status !== "ready") return;
+    const pid = problem.id;
+    const controller = new AbortController();
+    const update = (change) =>
+      setNoteGenerations((previous) => ({
+        ...previous,
+        [pid]: { ...previous[pid], ...change },
+      }));
+    request.current = controller;
+    setPending({ pid, kind: "note" });
+    update({ status: "pending", error: "" });
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 90000);
+    try {
+      const response = await askGemini({
+        apiKey: activeKey.current,
+        model,
+        task: "notes",
+        context: makeContext(problem, code, result),
+        history: turns[pid] || [],
+        signal: controller.signal,
+      });
+      update({
+        status: "complete",
+        text: response.text,
+        truncated: response.truncated,
+        model: models.find((item) => item.name === model)?.label || model,
+      });
+    } catch (error) {
+      update({
+        status: "error",
+        error:
+          error.name === "AbortError"
+            ? timedOut
+              ? "노트 생성 시간이 초과됐습니다. 다시 시도해 주세요."
+              : "노트 생성을 중지했습니다."
+            : error instanceof TypeError
+              ? "네트워크 연결을 확인해 주세요."
+              : error.message,
+      });
+    } finally {
+      clearTimeout(timer);
+      if (request.current === controller) {
+        request.current = null;
+        setPending(null);
+      }
+    }
+  }
   return (
     <TutorContext.Provider
       value={{
@@ -240,6 +293,10 @@ export function GeminiProvider({ children }) {
         setDrafts,
         pending,
         send,
+        generateNote,
+        noteGenerations,
+        clearNote: (pid) =>
+          setNoteGenerations((previous) => ({ ...previous, [pid]: null })),
         cancel: () => request.current?.abort(),
         clear: (pid) => setTurns((previous) => ({ ...previous, [pid]: [] })),
       }}
@@ -293,6 +350,102 @@ const Answer = memo(function Answer({ text }) {
     </div>
   );
 });
+
+export function GeminiNoteGenerator({
+  problem,
+  code,
+  result,
+  onAppend,
+  onOpenAI,
+}) {
+  const tutor = useContext(TutorContext);
+  const generation = tutor.noteGenerations[problem.id];
+  const count = (tutor.turns[problem.id] || []).filter(
+    (turn) => turn.answer && !turn.error,
+  ).length;
+  const ready = tutor.connection.status === "ready";
+  const busy = !!tutor.pending;
+  const generating =
+    tutor.pending?.kind === "note" && tutor.pending.pid === problem.id;
+  return (
+    <section className="note-ai" aria-label="AI 복습 노트">
+      <div className="note-ai-heading">
+        <strong>
+          <Sparkles size={14} /> AI 복습 노트
+        </strong>
+        <button
+          className="note-ai-generate"
+          disabled={!ready || !count || busy}
+          onClick={() => tutor.generateNote({ problem, code, result })}
+        >
+          {generating ? (
+            <Loader2 size={13} className="spin" />
+          ) : (
+            <Sparkles size={13} />
+          )}
+          {generating ? "노트 생성 중…" : "AI 대화로 노트 생성"}
+        </button>
+      </div>
+      <p>
+        이 문제의 질문·답변 {count}개를 핵심 개념과 실수, 복습 체크리스트로
+        정리합니다.
+      </p>
+      {ready ? (
+        <small>
+          AI 질문과 동일한 모델:{" "}
+          {tutor.models.find((item) => item.name === tutor.model)?.label} · 같은
+          API 키의 할당량·요금 적용
+        </small>
+      ) : (
+        <button className="note-ai-link" onClick={onOpenAI}>
+          AI 질문에서 키와 모델 연결하기
+        </button>
+      )}
+      {ready && !count && <p>먼저 AI 질문에서 이 문제에 대해 질문해 보세요.</p>}
+      {busy && !generating && (
+        <p role="status">다른 AI 요청이 끝난 뒤 생성할 수 있습니다.</p>
+      )}
+      {generating && (
+        <button className="note-ai-link" onClick={tutor.cancel}>
+          노트 생성 중지
+        </button>
+      )}
+      {generation?.error && (
+        <p className="gemini-form-error" role="alert">
+          {generation.error}
+        </p>
+      )}
+      {generation?.text && (
+        <div className="note-ai-preview">
+          <strong>생성된 노트 미리보기 · {generation.model}</strong>
+          <Answer text={generation.text} />
+          {generation.truncated && (
+            <p className="gemini-limit">
+              길이 제한으로 일부 내용이 생략됐을 수 있습니다.
+            </p>
+          )}
+          <div className="note-ai-actions">
+            <button
+              disabled={generating}
+              onClick={() => {
+                onAppend(generation.text);
+                tutor.clearNote(problem.id);
+              }}
+            >
+              내 노트에 추가
+            </button>
+            <button
+              disabled={generating}
+              onClick={() => tutor.clearNote(problem.id)}
+            >
+              미리보기 버리기
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
 
 export function GeminiTutor({ problem, code, result, hidden }) {
   const tutor = useContext(TutorContext);
@@ -616,11 +769,18 @@ export function GeminiTutor({ problem, code, result, hidden }) {
           submit();
         }}
       >
-        {busy && tutor.pending.pid !== problem.id && (
-          <p className="gemini-other-pending">
-            다른 문제의 답변을 작성 중입니다. 기다리거나 중지해 주세요.
+        {busy && tutor.pending.kind === "note" && (
+          <p className="gemini-other-pending" role="status">
+            복습 노트를 생성 중입니다. 완료 후 질문하거나 생성을 중지해 주세요.
           </p>
         )}
+        {busy &&
+          tutor.pending.kind !== "note" &&
+          tutor.pending.pid !== problem.id && (
+            <p className="gemini-other-pending">
+              다른 문제의 답변을 작성 중입니다. 기다리거나 중지해 주세요.
+            </p>
+          )}
         {formError && (
           <p className="gemini-form-error" role="alert">
             {formError}

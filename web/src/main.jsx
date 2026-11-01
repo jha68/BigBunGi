@@ -35,7 +35,11 @@ import {
   XCircle,
 } from "lucide-react";
 import CodeEditor from "./CodeEditor.jsx";
-import { GeminiProvider, GeminiTutor } from "./GeminiTutor.jsx";
+import {
+  GeminiProvider,
+  GeminiTutor,
+  GeminiNoteGenerator,
+} from "./GeminiTutor.jsx";
 import { gradeNumeric, gradePrediction } from "./grading.js";
 import "./styles.css";
 
@@ -888,6 +892,20 @@ function App() {
                   )}
                   {leftTab === "note" && (
                     <>
+                      <GeminiNoteGenerator
+                        problem={problem}
+                        code={currentCode}
+                        result={result}
+                        onOpenAI={() => setLeftTab("ai")}
+                        onAppend={(text) =>
+                          setNotes((previous) => ({
+                            ...previous,
+                            [problem.id]: [previous[problem.id], text]
+                              .filter(Boolean)
+                              .join("\n\n"),
+                          }))
+                        }
+                      />
                       <div className="section-label">나의 풀이 노트</div>
                       <p className="note-help">
                         접근 방법, 헷갈렸던 개념, 다음에 기억할 내용을 남겨

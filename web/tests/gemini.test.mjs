@@ -5,6 +5,7 @@ import {
   listModels,
   makeContext,
   makeRequest,
+  makeNoteRequest,
   preferredModel,
 } from "../src/gemini.js";
 
@@ -225,4 +226,52 @@ test("invalid credentials, quota, unsupported models and blocked responses have 
     }),
   );
   assert.equal(limited.truncated, true);
+});
+
+test("note generation summarizes all successful conversations, excludes failed turns and redacts credentials", async () => {
+  const history = Array.from({ length: 8 }, (_, i) => ({
+    question: `question-${i}`,
+    answer: `answer-${i}`,
+  }));
+  history.push(
+    { question: "pending", answer: "" },
+    { question: "failed", answer: "bad", error: "quota" },
+  );
+  const context = makeContext(problem, `print('${key}')`);
+  const payload = makeNoteRequest({ context, history, apiKey: key });
+  const data = JSON.parse(payload.contents[0].parts[0].text);
+  assert.equal(data.conversations.length, 8);
+  assert.equal(data.conversations[0].question, "question-0");
+  assert.equal(data.context.problem.id, "t1-01");
+  assert.ok(!JSON.stringify(payload).includes(key));
+  assert.ok(!JSON.stringify(payload).includes("DO_NOT_SEND"));
+  assert.throws(() => makeNoteRequest({ context, history: [] }), /질문·답변/);
+  let sent;
+  await askGemini(
+    {
+      apiKey: key,
+      model: "models/gemini-2.5-pro",
+      context,
+      history,
+      task: "notes",
+    },
+    async (url, options) => {
+      sent = {
+        url,
+        body: JSON.parse(options.body),
+        key: options.headers["x-goog-api-key"],
+      };
+      return ok({
+        candidates: [
+          {
+            content: { parts: [{ text: "# 복습 노트" }] },
+            finishReason: "STOP",
+          },
+        ],
+      });
+    },
+  );
+  assert.ok(sent.url.includes("models/gemini-2.5-pro:generateContent"));
+  assert.equal(sent.key, key);
+  assert.deepEqual(sent.body, payload);
 });
