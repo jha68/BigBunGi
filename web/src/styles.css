@@ -451,20 +451,6 @@ svg {
 .mobile-menu {
   display: none;
 }
-.page-intro {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 28px 32px 24px;
-}
-.eyebrow {
-  font-size: 9px;
-  letter-spacing: 1.9px;
-  font-weight: 650;
-  color: #99a6b6;
-  margin-bottom: 9px;
-}
 h1 {
   font-size: 26px;
   letter-spacing: -1.25px;
@@ -477,120 +463,11 @@ h1 > span {
   color: #1eb19e;
   margin-left: 3px;
 }
-.page-intro p {
-  font-size: 11px;
-  color: #8993a3;
-  margin: 8px 0 0;
-  letter-spacing: -0.1px;
-}
-.focus-timer {
-  background: #fff;
-  border: 1px solid #e4e9ef;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 13px;
-  min-width: 194px;
-  box-shadow: 0 2px 4px #23314703;
-}
-.focus-timer > svg {
-  color: #94a0b0;
-}
-.focus-timer > div {
-  flex: 1;
-}
-.focus-timer small {
-  display: block;
-  font-size: 8px;
-  color: #98a2b0;
-  margin-bottom: 4px;
-}
-.focus-timer span {
-  font-family: Consolas, monospace;
-  font-size: 19px;
-  color: #45536a;
-  letter-spacing: 1px;
-  line-height: 1;
-}
-.focus-timer button {
-  color: #9ca6b5;
-  padding: 5px;
-}
-.focus-timer button:first-of-type {
-  background: #f0f6f4;
-  color: #38a38f;
-  border-radius: 4px;
-}
-.focus-timer.ticking > svg {
-  color: #26a88f;
-}
-.practice-strip {
-  margin: 0 32px 18px;
-  border: 1px solid #e4eaf0;
-  border-radius: 8px;
-  background: #edf3f6;
-  padding: 15px 18px;
-  display: flex;
-  align-items: center;
-  gap: 13px;
-}
-.strip-icon {
-  height: 36px;
-  width: 36px;
-  border-radius: 8px;
-  background: #fff;
-  color: #3c7185;
-  display: grid;
-  place-items: center;
-  border: 1px solid #e2eaf0;
-}
-.practice-strip strong {
-  font-size: 12px;
-  color: #40556a;
-  font-weight: 650;
-}
-.practice-strip strong span {
-  font-weight: 450;
-  color: #758798;
-  border-left: 1px solid #cdd8e0;
-  padding-left: 9px;
-  margin-left: 9px;
-  font-size: 11px;
-}
-.practice-strip p {
-  margin: 5px 0 0;
-  font-size: 10px;
-  color: #8a9aa8;
-}
-.strip-total {
-  margin-left: auto;
-  font-size: 10px;
-  color: #7b8a9d;
-  white-space: nowrap;
-}
-.mini-progress {
-  display: flex;
-  gap: 4px;
-  margin-left: 2px;
-}
-.mini-progress i {
-  height: 6px;
-  width: 13px;
-  border-radius: 3px;
-  background: #d3dce4;
-}
-.mini-progress i.current {
-  background: #a2ccc4;
-}
-.mini-progress i.done {
-  background: #20ae98;
-}
 .workspace {
-  margin: 0 32px;
+  margin: 24px 32px 0;
   display: grid;
   grid-template-columns: minmax(340px, 0.93fr) minmax(410px, 1.17fr);
-  height: calc(100vh - 330px);
+  height: calc(100dvh - 184px);
   min-height: 680px;
   max-height: 1120px;
   gap: 17px;
@@ -1133,6 +1010,12 @@ h1 > span {
   min-height: 260px;
   overflow: hidden;
 }
+.coding-panel.ai-active .code-editor {
+  flex: 0.8;
+}
+.coding-panel.ai-active .results-panel {
+  flex: 1.2;
+}
 .results-tabs {
   height: 44px;
   display: flex;
@@ -1145,7 +1028,10 @@ h1 > span {
 .results-tabs > div {
   display: flex;
   height: 100%;
-  gap: 23px;
+  gap: 18px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 .results-tabs button {
   display: flex;
@@ -1155,6 +1041,8 @@ h1 > span {
   color: #9aa4b2;
   position: relative;
   padding: 0 1px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .results-tabs button.active {
   color: #526a7d;
@@ -1189,6 +1077,7 @@ h1 > span {
 }
 .result-content {
   flex: 1;
+  min-height: 0;
   overflow: auto;
   scrollbar-width: thin;
   scrollbar-color: #dce3eb transparent;
@@ -1978,14 +1867,6 @@ tr:nth-child(even) {
     padding-left: 23px;
     padding-right: 23px;
   }
-  .page-intro {
-    padding-left: 23px;
-    padding-right: 23px;
-  }
-  .practice-strip {
-    margin-left: 23px;
-    margin-right: 23px;
-  }
   .workspace {
     margin-left: 23px;
     margin-right: 23px;
@@ -2019,16 +1900,6 @@ tr:nth-child(even) {
     padding-left: 23px;
     padding-right: 23px;
   }
-  .mini-progress i {
-    width: 9px;
-  }
-  .focus-timer {
-    min-width: 176px;
-    gap: 8px;
-  }
-  .page-intro h1 {
-    font-size: 24px;
-  }
 }
 @media (max-width: 1080px) {
   .workspace {
@@ -2043,22 +1914,6 @@ tr:nth-child(even) {
   }
   .coding-panel {
     height: 740px;
-  }
-  .page-intro {
-    align-items: center;
-  }
-  .page-intro h1 {
-    font-size: 23px;
-  }
-  .focus-timer {
-    min-width: 156px;
-    padding: 11px 10px;
-  }
-  .focus-timer > svg {
-    display: none;
-  }
-  .mini-progress {
-    display: none;
   }
   .workspace-footer > span {
     max-width: 60%;
@@ -2142,70 +1997,8 @@ tr:nth-child(even) {
   .autosave {
     font-size: 9px;
   }
-  .page-intro {
-    padding: 24px 18px 20px;
-    align-items: center;
-    gap: 12px;
-  }
-  .eyebrow {
-    font-size: 7px;
-    letter-spacing: 1.2px;
-  }
-  .page-intro h1 {
-    font-size: 21px;
-    letter-spacing: -0.9px;
-  }
-  .page-intro p {
-    font-size: 9px;
-    line-height: 1.8;
-    max-width: 230px;
-    word-break: keep-all;
-    margin-top: 6px;
-  }
-  .focus-timer {
-    min-width: 112px;
-    max-width: 116px;
-    padding: 9px 8px;
-    gap: 4px;
-  }
-  .focus-timer span {
-    font-size: 16px;
-    letter-spacing: 0.5px;
-  }
-  .focus-timer small {
-    font-size: 7px;
-  }
-  .focus-timer button {
-    padding: 3px;
-  }
-  .focus-timer button:last-child {
-    display: none;
-  }
-  .practice-strip {
-    margin: 0 16px 14px;
-    padding: 12px;
-    gap: 10px;
-  }
-  .practice-strip strong {
-    font-size: 11px;
-  }
-  .practice-strip strong span {
-    font-size: 10px;
-    margin-left: 6px;
-    padding-left: 6px;
-  }
-  .practice-strip p {
-    font-size: 9px;
-  }
-  .strip-total {
-    font-size: 9px;
-  }
-  .strip-icon {
-    width: 32px;
-    height: 32px;
-  }
   .workspace {
-    margin: 0 16px;
+    margin: 18px 16px 0;
     gap: 16px;
   }
   .problem-panel {

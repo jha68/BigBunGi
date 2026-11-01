@@ -23,7 +23,6 @@ import {
   Loader2,
   Maximize2,
   Minus,
-  Pause,
   Play,
   Plus,
   RotateCcw,
@@ -32,7 +31,6 @@ import {
   Sparkles,
   Square,
   Terminal,
-  Timer,
   X,
   XCircle,
 } from "lucide-react";
@@ -46,19 +44,16 @@ const STORAGE = "bigbungi.practice.v1";
 const TYPE_INFO = {
   1: {
     name: "데이터 전처리",
-    sub: "분석의 기본을 단단하게",
     icon: Database,
     count: 10,
   },
   2: {
     name: "머신러닝 모델링",
-    sub: "예측하고, 성능을 높이고",
     icon: FlaskConical,
     count: 3,
   },
   3: {
     name: "통계 분석",
-    sub: "가설을 검정하고 해석하기",
     icon: BookOpen,
     count: 3,
   },
@@ -155,14 +150,11 @@ function App() {
     [navOpen, setNavOpen] = useState(false),
     [toast, setToast] = useState(""),
     [solutionLoading, setSolutionLoading] = useState(false);
-  const [seconds, setSeconds] = useState(initial.seconds ?? 10800),
-    [timerOn, setTimerOn] = useState(false);
   const worker = useRef(null),
     timeout = useRef(null),
     runMeta = useRef(null),
     fileCache = useRef({}),
     gradingCache = useRef(null),
-    deadline = useRef(null),
     toastTimer = useRef(null);
   const problemRef = useRef(problem),
     codeRef = useRef("");
@@ -211,30 +203,14 @@ function App() {
     try {
       localStorage.setItem(
         STORAGE,
-        JSON.stringify({ drafts, answers, notes, progress, selected, seconds }),
+        JSON.stringify({ drafts, answers, notes, progress, selected }),
       );
     } catch {
       notify(
         "브라우저 저장 공간이 부족해 자동 저장하지 못했습니다. 코드를 다운로드해 주세요.",
       );
     }
-  }, [drafts, answers, notes, progress, selected, seconds, notify]);
-  useEffect(() => {
-    if (!timerOn) return;
-    deadline.current = Date.now() + seconds * 1000;
-    const interval = setInterval(() => {
-      const remaining = Math.max(
-        0,
-        Math.ceil((deadline.current - Date.now()) / 1000),
-      );
-      setSeconds(remaining);
-      if (!remaining) {
-        setTimerOn(false);
-        notify("집중 타이머가 끝났습니다. 풀이와 코드는 그대로 유지됩니다.");
-      }
-    }, 250);
-    return () => clearInterval(interval);
-  }, [timerOn, notify]);
+  }, [drafts, answers, notes, progress, selected, notify]);
 
   const startWorker = useCallback(() => {
     worker.current?.terminate();
@@ -500,9 +476,6 @@ function App() {
       (!search || `${p.title} ${p.tags.join(" ")}`.includes(search)),
   );
   const index = catalog.findIndex((p) => p.id === selected);
-  const timerLabel = `${Math.floor(seconds / 60)
-    .toString()
-    .padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`;
   const currentAnswers = answers[selected] || {};
 
   return (
@@ -662,71 +635,6 @@ function App() {
             </a>
           </div>
         </header>
-        <div className="page-intro">
-          <div>
-            <div className="eyebrow">PRACTICE MAKES PROGRESS</div>
-            <h1>
-              오늘도, 합격에 한 걸음<span>.</span>
-            </h1>
-            <p>직접 분석하고 실행하며 익히는 빅데이터분석기사 실기</p>
-          </div>
-          <div className={`focus-timer ${timerOn ? "ticking" : ""}`}>
-            <Timer size={19} />
-            <div>
-              <small>집중 타이머</small>
-              <span aria-live="off">{timerLabel}</span>
-            </div>
-            <button
-              aria-label={timerOn ? "타이머 일시정지" : "타이머 시작"}
-              onClick={() => {
-                if (seconds > 0) setTimerOn((x) => !x);
-              }}
-            >
-              {timerOn ? <Pause size={15} /> : <Play size={15} />}
-            </button>
-            <button
-              aria-label="타이머 초기화"
-              onClick={() => {
-                setTimerOn(false);
-                setSeconds(10800);
-              }}
-            >
-              <RotateCcw size={14} />
-            </button>
-          </div>
-        </div>
-        <div className="practice-strip">
-          <div className="strip-icon">
-            <Database size={18} />
-          </div>
-          <div>
-            <strong>
-              작업형 {kind}유형 <span>{TYPE_INFO[kind].name}</span>
-            </strong>
-            <p>{TYPE_INFO[kind].sub}</p>
-          </div>
-          <span className="strip-total">
-            {
-              catalog.filter((p) => p.type === kind && progress[p.id]?.passed)
-                .length
-            }{" "}
-            / {TYPE_INFO[kind].count} 완료
-          </span>
-          <div className="mini-progress">
-            {Array.from({ length: TYPE_INFO[kind].count }, (_, i) => (
-              <i
-                key={i}
-                className={
-                  progress[`t${kind}-${String(i + 1).padStart(2, "0")}`]?.passed
-                    ? "done"
-                    : selected === `t${kind}-${String(i + 1).padStart(2, "0")}`
-                      ? "current"
-                      : ""
-                }
-              />
-            ))}
-          </div>
-        </div>
         {fetchError ? (
           <div className="fetch-error">
             <XCircle />
@@ -796,17 +704,6 @@ function App() {
                   </button>
                   <button
                     role="tab"
-                    aria-selected={leftTab === "ai"}
-                    className={
-                      leftTab === "ai" ? "active gemini-tab" : "gemini-tab"
-                    }
-                    onClick={() => setLeftTab("ai")}
-                  >
-                    <Sparkles size={14} />
-                    AI 질문
-                  </button>
-                  <button
-                    role="tab"
                     aria-selected={leftTab === "note"}
                     className={leftTab === "note" ? "active" : ""}
                     onClick={() => setLeftTab("note")}
@@ -825,15 +722,7 @@ function App() {
                     </button>
                   )}
                 </div>
-                <div
-                  className={`problem-body ${leftTab === "ai" ? "gemini-mode" : ""}`}
-                >
-                  <GeminiTutor
-                    problem={problem}
-                    code={currentCode}
-                    result={results[selected]}
-                    hidden={leftTab !== "ai"}
-                  />
+                <div className="problem-body">
                   {leftTab === "problem" && (
                     <>
                       <div className="section-label">문제 설명</div>
@@ -1073,7 +962,9 @@ function App() {
                   <span>직접 만든 시험형 연습문제</span>
                 </footer>
               </div>
-              <div className="coding-panel">
+              <div
+                className={`coding-panel ${bottomTab === "ai" ? "ai-active" : ""}`}
+              >
                 <div className="editor-topbar">
                   <div className="file-tab">
                     <FileCode2 size={16} />
@@ -1163,7 +1054,7 @@ function App() {
                 </div>
                 <div className="results-panel">
                   <div className="results-tabs">
-                    <div role="tablist" aria-label="실행과 제출">
+                    <div role="tablist" aria-label="실행·제출·AI 질문">
                       <button
                         role="tab"
                         aria-selected={bottomTab === "output"}
@@ -1186,8 +1077,21 @@ function App() {
                           <CheckCircle2 size={13} className="solved-icon" />
                         )}
                       </button>
+                      <button
+                        role="tab"
+                        aria-selected={bottomTab === "ai"}
+                        className={
+                          bottomTab === "ai"
+                            ? "active gemini-tab"
+                            : "gemini-tab"
+                        }
+                        onClick={() => setBottomTab("ai")}
+                      >
+                        <Sparkles size={14} />
+                        AI 질문
+                      </button>
                     </div>
-                    {result && (
+                    {result && bottomTab !== "ai" && (
                       <span
                         className={`execution-badge ${result.error ? "failed" : "success"}`}
                       >
@@ -1202,7 +1106,16 @@ function App() {
                       </span>
                     )}
                   </div>
-                  <div className="result-content" aria-live="polite">
+                  <div
+                    className={`result-content ${bottomTab === "ai" ? "gemini-mode" : ""}`}
+                    aria-live={bottomTab === "ai" ? "off" : "polite"}
+                  >
+                    <GeminiTutor
+                      problem={problem}
+                      code={currentCode}
+                      result={result}
+                      hidden={bottomTab !== "ai"}
+                    />
                     {bottomTab === "output" &&
                       (!result ? (
                         running?.id === selected ? (
@@ -1458,27 +1371,29 @@ function App() {
                       </div>
                     )}
                   </div>
-                  <div className="submission-bar">
-                    <span>
-                      <ShieldCheck size={13} />
-                      {problem.type === 2
-                        ? "예측값은 정답 데이터로 평가합니다"
-                        : "반올림 오차를 고려해 채점합니다"}
-                    </span>
-                    <button
-                      className="grade-button"
-                      data-testid="grade-code"
-                      disabled={!!running || grading}
-                      onClick={grade}
-                    >
-                      {grading ? (
-                        <Loader2 size={14} className="spin" />
-                      ) : (
-                        <Check size={15} />
-                      )}
-                      채점하기
-                    </button>
-                  </div>
+                  {bottomTab !== "ai" && (
+                    <div className="submission-bar">
+                      <span>
+                        <ShieldCheck size={13} />
+                        {problem.type === 2
+                          ? "예측값은 정답 데이터로 평가합니다"
+                          : "반올림 오차를 고려해 채점합니다"}
+                      </span>
+                      <button
+                        className="grade-button"
+                        data-testid="grade-code"
+                        disabled={!!running || grading}
+                        onClick={grade}
+                      >
+                        {grading ? (
+                          <Loader2 size={14} className="spin" />
+                        ) : (
+                          <Check size={15} />
+                        )}
+                        채점하기
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </section>

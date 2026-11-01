@@ -64,6 +64,10 @@ async def main():
         page = await context.new_page()
         page.on("pageerror", lambda error: errors.append(str(error)))
         await page.goto(os.environ.get("APP_URL", "http://127.0.0.1:4175/"), wait_until="networkidle")
+        assert await page.locator(".page-intro, .practice-strip, .focus-timer").count() == 0
+        assert not await page.get_by_role("tablist", name="문제 정보", exact=True).get_by_role("tab", name="AI 질문", exact=True).count()
+        result_tabs = page.get_by_role("tablist", name="실행·제출·AI 질문", exact=True)
+        assert [text.strip() for text in await result_tabs.get_by_role("tab").all_text_contents()] == ["실행 결과", "답안 제출", "AI 질문"]
         await page.wait_for_function("!document.querySelector('[data-testid=run-code]').disabled", timeout=120000)
         editor = page.get_by_role("textbox", name="Python 코드 편집기", exact=True)
 
@@ -75,6 +79,8 @@ async def main():
         await editor.press("Control+Enter")
         await page.get_by_test_id("python-error").wait_for()
         await page.get_by_role("tab", name="AI 질문", exact=True).click()
+        assert await page.locator(".results-panel .gemini-panel").count() == 1
+        assert await page.locator(".problem-body .scenario").is_visible(), "Problem must remain visible beside AI"
         assert await page.get_by_role("button", name="Gemini 질문 보내기").is_disabled()
         assert not requests, "API must not be called before key entry"
         await page.locator("#gemini-key").fill("invalid-test-key")
@@ -146,6 +152,7 @@ async def main():
         assert await page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         await page.get_by_role("textbox", name="Gemini에게 질문", exact=True).scroll_into_view_if_needed()
         assert await page.get_by_role("textbox", name="Gemini에게 질문", exact=True).is_visible()
+        await ask("모바일 질문 테스트")
         await page.screenshot(path="/tmp/bigbungi-gemini-mobile.png", full_page=True)
 
         stored = await page.evaluate("JSON.stringify({...localStorage}) + JSON.stringify({...sessionStorage})")

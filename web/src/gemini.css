@@ -5,18 +5,18 @@
 .panel-tabs > button {
   flex-shrink: 0;
 }
-.panel-tabs .gemini-tab {
+.results-tabs .gemini-tab {
   color: #8c86b4;
 }
-.panel-tabs .gemini-tab.active {
+.results-tabs .gemini-tab.active {
   color: #7564bd;
 }
-.panel-tabs .gemini-tab.active::after {
+.results-tabs .gemini-tab.active::after {
   background: #8c78ca;
 }
-.problem-body.gemini-mode {
+.result-content.gemini-mode {
   padding: 0;
-  overflow: hidden;
+  overflow: auto;
   min-height: 0;
 }
 .gemini-panel {
