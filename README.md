@@ -13,10 +13,25 @@
 - 선택 영역의 파란색 강조·테두리, 줄 번호·Python 문법 강조·자동 줄바꿈이 있는 읽기 전용 기준 풀이.
 - 데이터 미리보기·변수 설명·CSV 다운로드, 단계별 힌트, 기준 풀이, 풀이 노트, 진행률, 180분 타이머, 모바일 화면.
 - 코드·노트·진행률은 브라우저의 localStorage에 자동 저장됩니다. 다른 기기·브라우저로 동기화되지는 않습니다.
+- **Gemini 튜터:** 현재 문제·작성 중인 코드·실행 결과를 첨부하는 문제별 AI 대화. 개인 API 키, 모델 선택, 코드 문법 강조, 오류 안내·재시도·응답 중지.
+
+## Gemini 질문하기
+
+1. 문제를 선택하고 **AI 질문** 탭을 엽니다.
+2. [Google AI Studio](https://aistudio.google.com/apikey)에서 발급한 **본인의 API 키**를 입력하고 **키 연결**을 누릅니다. 키는 채팅이나 저장소에 올리지 마세요.
+3. 키로 사용 가능한 텍스트 모델을 조회합니다. 기본은 공식 SDK의 `gemini-flash-latest` 별칭을 우선 사용하며, 없으면 조회된 Flash 모델을 선택합니다. 연결 설정에서 다른 모델도 선택할 수 있습니다.
+4. 질문을 입력하고 전송 버튼이나 `Ctrl/Cmd+Enter`로 보냅니다. **전송 순간의 최신 문제·코드·변수 설명·데이터 미리보기**가 자동 첨부됩니다. 최근 실행 결과·오류는 첨부 내용에서 켜고 끌 수 있습니다.
+5. 같은 문제의 최근 6개 성공한 질의·응답을 함께 참고합니다. 다른 문제로 바꿔도 대화는 섞이지 않습니다.
+
+키와 AI 대화는 현재 탭 메모리에만 보관하며, localStorage·sessionStorage·URL·배포 파일에 저장하지 않습니다. **새로고침하면 키와 AI 대화가 지워집니다.** 기존 코드·풀이 노트·진행률 자동 저장은 유지됩니다. API 키는 Google API의 `x-goog-api-key` 헤더에만 보내고, 프롬프트에 우연히 포함된 동일한 키는 마스킹합니다.
+
+요청은 브라우저에서 Google Gemini로 직접 전송되며 입력한 키의 할당량과 요금 정책이 적용됩니다. 공용 API 키나 별도 서버는 사용하지 않습니다. API 키에 웹사이트 제한을 설정한 경우 운영 도메인을 허용해야 합니다. 키를 코드나 GitHub Secrets, `VITE_*` 환경변수에 넣지 마세요.
+
+전체 CSV·기준 풀이·정답 키·평가 정답 라벨은 첨부하지 않습니다. Gemini는 Python을 직접 실행하지 않으므로 제안 코드는 에디터에서 직접 실행하여 확인하세요. 답변의 코드 블록은 읽기 전용이며 자동으로 실행하지 않습니다.
 
 ## 실행 구조
 
-React + CodeMirror + Vite의 **정적 사이트**입니다. Python 3.12(Pyodide)는 Web Worker 안에서 실행되므로 사용자 코드가 서버나 개발 환경에서 실행되지 않습니다. GitHub Pages만으로 동작하며 백엔드나 API 키가 필요 없습니다.
+React + CodeMirror + Vite의 **정적 사이트**입니다. Python 3.12(Pyodide)는 Web Worker 안에서 실행되므로 사용자 코드가 서버나 개발 환경에서 실행되지 않습니다. Python 풀이와 채점은 API 키 없이 작동하며, 선택 기능인 Gemini 튜터에만 개인 키가 필요합니다. 별도 백엔드는 없습니다.
 
 첫 접속에는 jsDelivr에서 Python 런타임과 pandas·NumPy를 다운로드합니다. scipy·scikit-learn·statsmodels·matplotlib는 코드의 import에 따라 추가 로드됩니다. 첫 실행에는 인터넷이 필요하며 이후 브라우저 캐시를 활용합니다. multiprocessing·임의의 네이티브 패키지·서버 파일 접근은 지원하지 않습니다. 각 실행은 새로운 풀이 네임스페이스와 새로운 `data/` 작업 폴더를 사용합니다.
 
@@ -56,9 +71,13 @@ npm run preview -- --port 4173 --strictPort
 CHROMIUM_PATH=/usr/bin/chromium .venv/bin/python tests/browser_smoke.py
 # Ctrl/Cmd+Enter, 드래그 선택 강조, 읽기 전용 해설의 문법 강조 검증
 CHROMIUM_PATH=/usr/bin/chromium .venv/bin/python tests/browser_editor.py
+# Gemini 컨텍스트·대화 분리·키 보관·오류·모바일 UI 검증 (Google 응답은 모의 데이터)
+APP_URL=http://127.0.0.1:5173/ CHROMIUM_PATH=/usr/bin/chromium .venv/bin/python tests/browser_gemini.py
 ```
 
 실제 WebAssembly Python에서 16개 기준 풀이를 실행하고 채점하며 오류·DataFrame·그래프·중지·자동 저장·모바일 탐색을 검증합니다. 클라우드 프록시의 CA를 Chromium이 신뢰하지 않는 경우 테스트는 Python의 검증된 TLS 전송으로 CDN만 연결합니다. TLS 및 Pyodide 패키지 해시 검증은 유지합니다.
+
+Gemini 테스트는 Google의 HTTP 응답을 모의 처리하고 실제 Python 오류를 컨텍스트에 넣어 검증합니다. 유효한 개인 키가 없는 개발 환경에서는 실제 Gemini 답변 생성까지 검증했다고 간주하지 않습니다.
 
 ## 문제 풀이
 
@@ -93,6 +112,9 @@ Cloudflare DNS 레코드는 다음과 같습니다. DNS 레코드를 직접 설�
 | `bigbungi/datasets.py` | 합성 데이터 생성 |
 | `bigbungi/prepare.py` | 배포 자료와 정답 생성 |
 | `web/src/main.jsx` | 연습 화면·자동 저장·실행 관리 |
+| `web/src/CodeEditor.jsx` | 공용 Python 편집기·읽기 전용 코드 표시 |
+| `web/src/GeminiTutor.jsx` | 키 연결·문제별 대화·질문 UI |
+| `web/src/gemini.js` | Google REST 호출·컨텍스트 구성·오류 처리 |
 | `web/public/python-worker.js` | 실제 Python 실행·결과 수집 |
 | `web/src/grading.js` | 수치 답안·CSV 검증·AUC/F1/RMSE 채점 |
 | `tests/` · `web/tests/` | 콘텐츠·채점·실제 브라우저 검증 |

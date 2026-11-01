@@ -1,10 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { EditorView, basicSetup } from "codemirror";
-import { EditorState, Prec } from "@codemirror/state";
-import { keymap } from "@codemirror/view";
-import { python } from "@codemirror/lang-python";
-import { oneDark } from "@codemirror/theme-one-dark";
 import {
   ArrowDownToLine,
   ArrowLeft,
@@ -34,12 +29,15 @@ import {
   RotateCcw,
   Search,
   ShieldCheck,
+  Sparkles,
   Square,
   Terminal,
   Timer,
   X,
   XCircle,
 } from "lucide-react";
+import CodeEditor from "./CodeEditor.jsx";
+import { GeminiProvider, GeminiTutor } from "./GeminiTutor.jsx";
 import { gradeNumeric, gradePrediction } from "./grading.js";
 import "./styles.css";
 
@@ -81,77 +79,6 @@ async function jsonFile(path) {
       `자료를 불러오지 못했습니다 (${r.status}). 새로고침해 주세요.`,
     );
   return r.json();
-}
-
-function CodeEditor({
-  value,
-  onChange,
-  onRun,
-  fontSize = 13,
-  readOnly = false,
-}) {
-  const host = useRef(null),
-    view = useRef(null),
-    change = useRef(onChange),
-    run = useRef(onRun);
-  change.current = onChange;
-  run.current = onRun;
-  useEffect(() => {
-    view.current = new EditorView({
-      doc: value,
-      extensions: [
-        // basicSetup binds Mod-Enter to insertBlankLine. Our run command must
-        // take precedence over that keymap on Windows, Linux and macOS.
-        ...(readOnly
-          ? []
-          : [
-              Prec.highest(
-                keymap.of(
-                  ["Mod-Enter", "Ctrl-Enter"].map((key) => ({
-                    key,
-                    run: () => {
-                      run.current?.();
-                      return true;
-                    },
-                    preventDefault: true,
-                  })),
-                ),
-              ),
-            ]),
-        basicSetup,
-        python(),
-        oneDark,
-        EditorState.readOnly.of(readOnly),
-        EditorView.editable.of(!readOnly),
-        ...(readOnly ? [EditorView.lineWrapping] : []),
-        EditorView.contentAttributes.of({
-          "aria-label": readOnly ? "Python 기준 풀이" : "Python 코드 편집기",
-          "aria-readonly": String(readOnly),
-          ...(readOnly ? { tabindex: "0" } : {}),
-          spellcheck: "false",
-        }),
-        EditorView.updateListener.of((update) => {
-          if (update.docChanged) change.current?.(update.state.doc.toString());
-        }),
-      ],
-      parent: host.current,
-    });
-    return () => view.current?.destroy();
-  }, []);
-  useEffect(() => {
-    const editor = view.current;
-    if (editor && editor.state.doc.toString() !== value)
-      editor.dispatch({
-        changes: { from: 0, to: editor.state.doc.length, insert: value },
-      });
-  }, [value]);
-  return (
-    <div
-      ref={host}
-      className={readOnly ? "reference-code" : "code-editor"}
-      style={{ "--code-font-size": `${fontSize}px` }}
-    />
-  );
 }
 
 function Badge({ children, tone = "" }) {
@@ -869,6 +796,17 @@ function App() {
                   </button>
                   <button
                     role="tab"
+                    aria-selected={leftTab === "ai"}
+                    className={
+                      leftTab === "ai" ? "active gemini-tab" : "gemini-tab"
+                    }
+                    onClick={() => setLeftTab("ai")}
+                  >
+                    <Sparkles size={14} />
+                    AI 질문
+                  </button>
+                  <button
+                    role="tab"
                     aria-selected={leftTab === "note"}
                     className={leftTab === "note" ? "active" : ""}
                     onClick={() => setLeftTab("note")}
@@ -887,7 +825,15 @@ function App() {
                     </button>
                   )}
                 </div>
-                <div className="problem-body">
+                <div
+                  className={`problem-body ${leftTab === "ai" ? "gemini-mode" : ""}`}
+                >
+                  <GeminiTutor
+                    problem={problem}
+                    code={currentCode}
+                    result={results[selected]}
+                    hidden={leftTab !== "ai"}
+                  />
                   {leftTab === "problem" && (
                     <>
                       <div className="section-label">문제 설명</div>
@@ -1581,4 +1527,8 @@ function App() {
   );
 }
 
-createRoot(document.getElementById("root")).render(<App />);
+createRoot(document.getElementById("root")).render(
+  <GeminiProvider>
+    <App />
+  </GeminiProvider>,
+);

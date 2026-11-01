@@ -8,6 +8,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
+          markdown: ["react-markdown", "remark-gfm"],
           editor: [
             "codemirror",
             "@codemirror/lang-python",
