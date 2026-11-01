@@ -41,6 +41,7 @@ async def main():
                 body = {"models": [
                     {"name": "models/gemini-flash-latest", "displayName": "Gemini Flash", "supportedGenerationMethods": ["generateContent"]},
                     {"name": "models/gemini-pro", "displayName": "Gemini Pro", "supportedGenerationMethods": ["generateContent"]},
+                    {"name": "models/gemini-2.5-pro", "displayName": "Gemini 2.5 Pro", "supportedGenerationMethods": ["generateContent"]},
                     {"name": "models/gemini-image", "displayName": "Image", "supportedGenerationMethods": ["generateContent"]},
                 ]}
             else:
@@ -64,7 +65,7 @@ async def main():
         page = await context.new_page()
         page.on("pageerror", lambda error: errors.append(str(error)))
         await page.goto(os.environ.get("APP_URL", "http://127.0.0.1:4175/"), wait_until="networkidle")
-        assert await page.locator(".page-intro, .practice-strip, .focus-timer").count() == 0
+        assert await page.locator(".page-intro, .practice-strip, .focus-timer, .dataset-callout, .topic-tags").count() == 0
         assert not await page.get_by_role("tablist", name="문제 정보", exact=True).get_by_role("tab", name="AI 질문", exact=True).count()
         result_tabs = page.get_by_role("tablist", name="실행·제출·AI 질문", exact=True)
         assert [text.strip() for text in await result_tabs.get_by_role("tab").all_text_contents()] == ["실행 결과", "답안 제출", "AI 질문"]
@@ -90,6 +91,17 @@ async def main():
         await page.locator("#gemini-key").fill(KEY)
         await page.get_by_role("button", name="키 연결", exact=True).click()
         await page.wait_for_selector(".gemini-status.ready")
+        assert "USD/100만 토큰" in await page.locator(".gemini-inline-price").inner_text()
+        await page.get_by_role("button", name="Gemini 연결 설정", exact=True).click()
+        options = await page.locator("#gemini-model option").all_text_contents()
+        assert any("Gemini Flash" in text and "$0.75" in text and "$3.75" in text for text in options)
+        assert any("Gemini Pro" in text and "가격 확인 필요" in text for text in options)
+        await page.locator("#gemini-model").select_option("models/gemini-2.5-pro")
+        assert "200,000" in await page.locator(".gemini-price-info").inner_text()
+        assert "$15.00" in await page.locator(".gemini-inline-price").inner_text()
+        await page.locator("#gemini-model").select_option("models/gemini-flash-latest")
+        await page.get_by_role("button", name="설정 접기", exact=True).click()
+        print("PASS: model name/selector prices, units, long-context tier and unknown-price fallback.", flush=True)
         print("PASS: key required, credential error, real model-list request contract and connection state.", flush=True)
 
         async def ask(question):

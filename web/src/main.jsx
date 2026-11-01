@@ -738,22 +738,6 @@ function App() {
                           </li>
                         ))}
                       </ol>
-                      <div className="dataset-callout">
-                        <FileSpreadsheet size={20} />
-                        <div>
-                          <strong>제공 데이터</strong>
-                          <span>
-                            {problem.files.map((f) => f.name).join(" · ")}
-                          </span>
-                          <small>코드에서 data/파일명.csv로 불러오세요.</small>
-                        </div>
-                        <button
-                          onClick={() => setLeftTab("data")}
-                          aria-label="데이터 미리보기"
-                        >
-                          <ArrowRight size={17} />
-                        </button>
-                      </div>
                       <div className="section-label">제출 형식</div>
                       {problem.type === 2 ? (
                         <div className="submission-contract">
@@ -814,11 +798,6 @@ function App() {
                               {hint}
                             </p>
                           ))}
-                      </div>
-                      <div className="topic-tags">
-                        {problem.tags.map((t) => (
-                          <span key={t}># {t}</span>
-                        ))}
                       </div>
                     </>
                   )}

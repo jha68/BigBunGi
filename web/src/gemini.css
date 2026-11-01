@@ -62,6 +62,19 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.gemini-heading small.gemini-selected-model {
+  display: flex;
+  align-items: baseline;
+  gap: 3px 7px;
+  flex-wrap: wrap;
+  overflow: visible;
+  white-space: normal;
+  line-height: 1.6;
+}
+.gemini-inline-price {
+  color: #9d8ab8;
+  font-size: 8px;
+}
 .gemini-heading > button {
   padding: 4px;
   color: #a79bb8;
@@ -182,6 +195,29 @@
   color: #b19cbb;
   padding: 4px 0;
   white-space: nowrap;
+}
+.gemini-price-info {
+  padding: 8px 9px;
+  margin-top: 8px;
+  border: 1px solid #e9e1f2;
+  border-radius: 5px;
+  background: #fcfaff;
+  line-height: 1.8;
+}
+.gemini-price-info p {
+  margin: 0 0 4px;
+  color: #9b8bae;
+  font-size: 9px;
+}
+.gemini-price-info small,
+.gemini-price-info > span {
+  display: block;
+  color: #b1a5bf;
+  font-size: 8px;
+}
+.gemini-price-info a {
+  display: inline;
+  font-size: 8px;
 }
 .gemini-settings-done {
   display: flex;

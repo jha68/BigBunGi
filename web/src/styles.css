@@ -641,46 +641,6 @@ h1 > span {
   color: #6a778b;
   word-break: keep-all;
 }
-.dataset-callout {
-  border: 1px solid #e7edf2;
-  border-radius: 7px;
-  background: #f8fafc;
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 14px 12px;
-  margin: 0 0 25px;
-}
-.dataset-callout > svg {
-  color: #69a99c;
-}
-.dataset-callout > div {
-  flex: 1;
-  min-width: 0;
-}
-.dataset-callout strong {
-  display: block;
-  font-size: 10px;
-  color: #63748a;
-  margin-bottom: 5px;
-}
-.dataset-callout span {
-  display: block;
-  font-family: Consolas, monospace;
-  color: #506d7e;
-  font-size: 10px;
-  overflow-wrap: anywhere;
-}
-.dataset-callout small {
-  display: block;
-  font-size: 9px;
-  color: #9ba6b2;
-  margin-top: 5px;
-}
-.dataset-callout button {
-  color: #9ba8b5;
-  padding: 4px;
-}
 .answer-contract {
   margin-top: 12px;
   border-top: 1px solid #edf0f4;
@@ -761,16 +721,6 @@ h1 > span {
   display: block;
   font-size: 9px;
   margin-bottom: 3px;
-}
-.topic-tags {
-  display: flex;
-  gap: 7px;
-  flex-wrap: wrap;
-  margin-top: 19px;
-}
-.topic-tags span {
-  font-size: 9px;
-  color: #a3acb8;
 }
 .problem-footer {
   border-top: 1px solid #e9edf2;
@@ -2173,9 +2123,6 @@ tr:nth-child(even) {
     font-size: 11px;
   }
   .hint-area p {
-    font-size: 11px;
-  }
-  .dataset-callout strong {
     font-size: 11px;
   }
   .numeric-answers label > span {

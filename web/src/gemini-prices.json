@@ -1,0 +1,114 @@
+{
+  "retrievedAt": "2026-11-01",
+  "currency": "USD",
+  "tokensPerUnit": 1000000,
+  "sourceName": "LiteLLM 요금표",
+  "sourceUrl": "https://github.com/BerriAI/litellm/blob/60fc121ce8ab995cb2997e0bbd0a980ee93c627d/model_prices_and_context_window.json",
+  "officialUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+  "models": {
+    "gemini-3.1-flash-lite-preview": {
+      "input": 0.25,
+      "output": 1.5
+    },
+    "gemini-2.5-flash": {
+      "input": 0.3,
+      "output": 2.5
+    },
+    "gemini-2.5-flash-lite": {
+      "input": 0.1,
+      "output": 0.4
+    },
+    "gemini-flash-latest": {
+      "input": 0.75,
+      "output": 3.75
+    },
+    "gemini-flash-lite-latest": {
+      "input": 0.3,
+      "output": 2.5
+    },
+    "gemini-2.5-pro": {
+      "input": 1.25,
+      "output": 10.0,
+      "longContext": {
+        "above": 200000,
+        "input": 2.5,
+        "output": 15.0
+      }
+    },
+    "gemini-3.1-flash-lite": {
+      "input": 0.25,
+      "output": 1.5
+    },
+    "gemini-3.5-flash-lite": {
+      "input": 0.3,
+      "output": 2.5
+    },
+    "gemini-3-flash-preview": {
+      "input": 0.5,
+      "output": 3.0
+    },
+    "gemini-3.5-flash": {
+      "input": 1.5,
+      "output": 9.0
+    },
+    "gemini-3.6-flash": {
+      "input": 0.75,
+      "output": 3.75
+    },
+    "gemini-3.7-flash": {
+      "input": 0.75,
+      "output": 3.75
+    },
+    "gemini-3.8-flash": {
+      "input": 0.75,
+      "output": 3.75
+    },
+    "gemini-omni-flash-preview": {
+      "input": 1.5,
+      "output": 9.0
+    },
+    "gemini-3.1-pro-preview": {
+      "input": 2.0,
+      "output": 12.0,
+      "longContext": {
+        "above": 200000,
+        "input": 4.0,
+        "output": 18.0
+      }
+    },
+    "gemini-3.1-pro-preview-customtools": {
+      "input": 2.0,
+      "output": 12.0,
+      "longContext": {
+        "above": 200000,
+        "input": 4.0,
+        "output": 18.0
+      }
+    },
+    "gemini-pro-latest": {
+      "input": 2.0,
+      "output": 12.0,
+      "longContext": {
+        "above": 200000,
+        "input": 4.0,
+        "output": 18.0
+      }
+    },
+    "gemini-3.5-transcribe": {
+      "input": 2.0,
+      "output": 12.0
+    },
+    "gemini-omni-1.1-flash": {
+      "input": 1.5,
+      "output": 9.0
+    },
+    "gemini-nano-banana-2.1": {
+      "input": 1.5,
+      "output": 7.5
+    },
+    "gemini-4-argon": {
+      "input": 2.0,
+      "output": 10.0
+    }
+  }
+}

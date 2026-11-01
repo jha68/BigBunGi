@@ -27,6 +27,11 @@ import {
 } from "lucide-react";
 import CodeEditor from "./CodeEditor.jsx";
 import {
+  modelPriceLabel,
+  modelPriceDetail,
+  pricingSource,
+} from "./model-pricing.js";
+import {
   askGemini,
   listModels,
   makeContext,
@@ -128,7 +133,9 @@ export function GeminiProvider({ children }) {
     if (!question.trim()) return "질문을 입력해 주세요.";
     if (question.length > 4000) return "질문은 4,000자 이내로 입력해 주세요.";
     const pid = problem.id,
-      id = retryId || globalThis.crypto?.randomUUID?.() ||
+      id =
+        retryId ||
+        globalThis.crypto?.randomUUID?.() ||
         `turn-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       controller = new AbortController();
     const history = (turns[pid] || []).filter(
@@ -303,10 +310,22 @@ export function GeminiTutor({ problem, code, result, hidden }) {
         </span>
         <div>
           <strong>Gemini 튜터</strong>
-          <small>
-            {ready
-              ? tutor.models.find((m) => m.name === tutor.model)?.label
-              : "내 문제와 코드를 함께 보는 AI"}
+          <small className={ready ? "gemini-selected-model" : ""}>
+            {ready ? (
+              <>
+                <span>
+                  {tutor.models.find((m) => m.name === tutor.model)?.label}
+                </span>
+                <span
+                  className="gemini-inline-price"
+                  title={modelPriceDetail(tutor.model)}
+                >
+                  {modelPriceLabel(tutor.model, true)}
+                </span>
+              </>
+            ) : (
+              "내 문제와 코드를 함께 보는 AI"
+            )}
           </small>
         </div>
         <span className={`gemini-status ${ready ? "ready" : ""}`}>
@@ -369,24 +388,52 @@ export function GeminiTutor({ problem, code, result, hidden }) {
             </button>
           </div>
           {ready && (
-            <div className="gemini-model-row">
-              <label htmlFor="gemini-model">모델</label>
-              <select
-                id="gemini-model"
-                value={tutor.model}
-                onChange={(e) => tutor.setModel(e.target.value)}
-                disabled={busy}
-              >
-                {tutor.models.map((model) => (
-                  <option key={model.name} value={model.name}>
-                    {model.label}
-                  </option>
-                ))}
-              </select>
-              <button onClick={tutor.disconnect} disabled={busy}>
-                연결 해제
-              </button>
-            </div>
+            <>
+              <div className="gemini-model-row">
+                <label htmlFor="gemini-model">모델</label>
+                <select
+                  id="gemini-model"
+                  value={tutor.model}
+                  onChange={(e) => tutor.setModel(e.target.value)}
+                  disabled={busy}
+                >
+                  {tutor.models.map((model) => (
+                    <option key={model.name} value={model.name}>
+                      {model.label} · {modelPriceLabel(model.name)}
+                    </option>
+                  ))}
+                </select>
+                <button onClick={tutor.disconnect} disabled={busy}>
+                  연결 해제
+                </button>
+              </div>
+              <div className="gemini-price-info">
+                <p>{modelPriceDetail(tutor.model)}</p>
+                <small>
+                  무료 한도·캐시·배치 요금은 별도이며, latest 별칭의 가격은
+                  변경될 수 있습니다.
+                </small>
+                <span>
+                  조회 {pricingSource.retrievedAt} ·{" "}
+                  <a
+                    href={pricingSource.sourceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {pricingSource.sourceName}
+                  </a>{" "}
+                  ·{" "}
+                  <a
+                    href={pricingSource.officialUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Google 공식 요금
+                    <ExternalLink size={10} />
+                  </a>
+                </span>
+              </div>
+            </>
           )}
           <p>
             <ShieldCheck size={12} />
