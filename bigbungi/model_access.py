@@ -61,13 +61,14 @@ def availability(html, names):
 def main():
     root = Path(__file__).resolve().parent.parent
     prices = json.loads((root/"web/src/gemini-prices.json").read_text())
-    names = [n for n,p in prices["models"].items() if max(p["input"],p["output"],p.get("longContext",{}).get("input",0),p.get("longContext",{}).get("output",0)) < 1]
     html = ""; error = None
     if "--offline" not in sys.argv:
         try:
             with urllib.request.urlopen(urllib.request.Request(SOURCE, headers={"User-Agent":"BigBunGi-pricing-check"}),timeout=25) as response:
                 html = response.read().decode("utf-8")
         except Exception as exc: error = type(exc).__name__
+    parser = PricingTables(); parser.feed(html)
+    names = sorted(set(prices["models"]) | {name for name in parser.rows if name.startswith("gemini-")})
     data = {"source": SOURCE,"checkedAt":datetime.now(timezone.utc).isoformat(),"models":availability(html,names)}
     if error: data["fetchError"] = error
     target = root/"web/public/content/model-access.json"; target.parent.mkdir(parents=True,exist_ok=True)

@@ -9,29 +9,50 @@ import {
   freeTierLabel,
 } from "../src/model-pricing.js";
 
-test("strict sub-dollar filter excludes expensive, unknown and long-context rates and sorts by input then output", () => {
+test("includes free-tier models OR either base rate below one dollar, then sorts prices", () => {
   const prices = {
     a: { input: 0.2, output: 0.3 },
-    b: { input: 0.1, output: 0.9 },
+    b: { input: 0.1, output: 2 },
     c: { input: 0.1, output: 0.4 },
-    d: { input: 1, output: 0.1 },
-    e: { input: 0.1, output: 1 },
+    d: { input: 2, output: 0.1 },
+    boundary: { input: 1, output: 1 },
     f: { input: 0.1, output: 0.4, longContext: { input: 2, output: 3 } },
+    expensiveFree: { input: 3, output: 15 },
+    expensivePaid: { input: 3, output: 15 },
+  };
+  const access = {
+    models: {
+      expensiveFree: { available: true },
+      unknownFree: { available: true },
+      expensivePaid: { available: false },
+      unknown: { available: null },
+    },
   };
   const result = affordableModels(
-    ["a", "b", "c", "d", "e", "f", "unknown"].map((name) => ({ name })),
+    [...Object.keys(prices), "unknown", "unknownFree"].map((name) => ({
+      name,
+    })),
+    access,
     (name) => prices[name],
   );
   assert.deepEqual(
     result.map((m) => m.name),
-    ["c", "b", "a"],
+    ["c", "f", "b", "a", "d", "expensiveFree", "unknownFree"],
   );
   assert.deepEqual(
-    affordableModels([
-      { name: "models/gemini-2.5-flash-lite" },
-      { name: "models/gemini-flash-latest" },
-    ]).map((m) => m.name),
-    ["models/gemini-2.5-flash-lite"],
+    affordableModels(
+      [
+        { name: "models/gemini-2.5-flash-lite" },
+        { name: "models/gemini-flash-latest" },
+        { name: "models/gemini-2.5-pro" },
+      ],
+      { models: { "gemini-2.5-pro": { available: true } } },
+    ).map((m) => m.name),
+    [
+      "models/gemini-2.5-flash-lite",
+      "models/gemini-flash-latest",
+      "models/gemini-2.5-pro",
+    ],
   );
 });
 test("free-tier support is separate from model access and unknown is not free", () => {

@@ -484,7 +484,7 @@ h1 > span {
   flex-direction: column;
 }
 .problem-heading {
-  padding: 23px 23px 20px;
+  padding: 12px 23px;
 }
 .problem-kicker {
   display: flex;
@@ -507,7 +507,7 @@ h1 > span {
   line-height: 1.5;
   letter-spacing: -0.7px;
   color: #27344a;
-  margin: 13px 0 12px;
+  margin: 6px 0;
 }
 .problem-meta {
   display: flex;
@@ -1755,7 +1755,7 @@ tr:nth-child(even) {
     gap: 24px;
   }
   .problem-heading {
-    padding: 27px 30px;
+    padding: 14px 30px;
   }
   .problem-body {
     padding: 25px 30px;
@@ -1818,7 +1818,7 @@ tr:nth-child(even) {
     grid-template-columns: minmax(310px, 0.93fr) minmax(360px, 1.1fr);
   }
   .problem-heading {
-    padding: 20px 17px;
+    padding: 12px 17px;
   }
   .problem-heading h2 {
     font-size: 17px;
@@ -1878,7 +1878,7 @@ tr:nth-child(even) {
     font-size: 20px;
   }
   .problem-heading {
-    padding: 23px;
+    padding: 12px 23px;
   }
   .problem-body {
     padding: 24px;
@@ -1950,7 +1950,7 @@ tr:nth-child(even) {
     max-height: 740px;
   }
   .problem-heading {
-    padding: 21px 19px 18px;
+    padding: 12px 19px;
   }
   .problem-heading h2 {
     font-size: 19px;

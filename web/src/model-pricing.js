@@ -2,22 +2,25 @@ import snapshot from "./gemini-prices.json" with { type: "json" };
 
 export const pricingSource = snapshot;
 
-export function affordableModels(models, lookup = modelPrice) {
-  const maximum = (price, field) =>
-    Math.max(price[field], price.longContext?.[field] ?? price[field]);
+export function affordableModels(models, access = null, lookup = modelPrice) {
+  const rate = (price, field) => price?.[field] ?? Infinity;
   return models
     .filter((model) => {
       const price = lookup(model.name);
+      const free =
+        access?.models?.[model.name.replace(/^models\//, "")]?.available ===
+        true;
       return (
-        price && maximum(price, "input") < 1 && maximum(price, "output") < 1
+        free ||
+        (price && (rate(price, "input") < 1 || rate(price, "output") < 1))
       );
     })
     .sort((a, b) => {
       const x = lookup(a.name),
         y = lookup(b.name);
       return (
-        maximum(x, "input") - maximum(y, "input") ||
-        maximum(x, "output") - maximum(y, "output") ||
+        rate(x, "input") - rate(y, "input") ||
+        rate(x, "output") - rate(y, "output") ||
         a.name.localeCompare(b.name)
       );
     });

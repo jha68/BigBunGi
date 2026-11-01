@@ -62,7 +62,7 @@ async def main():
                 if not release.is_set(): raise
 
         async def access(route):
-            await route.fulfill(status=200,content_type="application/json",body=json.dumps({"source":"https://ai.google.dev/gemini-api/docs/pricing","models":{"gemini-2.5-flash-lite":{"available":True}}}))
+            await route.fulfill(status=200,content_type="application/json",body=json.dumps({"source":"https://ai.google.dev/gemini-api/docs/pricing","models":{"gemini-2.5-flash-lite":{"available":True},"gemini-2.5-pro":{"available":True},"gemini-pro":{"available":True}}}))
         await context.route("**/content/model-access.json", access)
         await context.route("https://cdn.jsdelivr.net/pyodide/**", cdn)
         await context.route("https://generativelanguage.googleapis.com/**", gemini)
@@ -97,12 +97,15 @@ async def main():
         assert "USD/100만 토큰" in await page.locator(".gemini-inline-price").inner_text()
         await page.get_by_role("button", name="Gemini 연결 설정", exact=True).click()
         options = await page.locator("#gemini-model option").all_text_contents()
-        assert len(options) == 1, options
+        assert len(options) == 4, options
+        assert "Gemini Flash" in options[1] and "$3.75" in options[1]
+        assert "Gemini 2.5 Pro" in options[2] and "무료 플랜 지원" in options[2]
+        assert "Gemini Pro" in options[3] and "가격 확인 필요" in options[3]
         assert "Flash Lite" in options[0] and "$0.10" in options[0] and "$0.40" in options[0]
         assert "무료 플랜 지원" in options[0]
         assert "무료 플랜 지원" in await page.locator(".gemini-free-tier").inner_text()
         await page.get_by_role("button", name="설정 접기", exact=True).click()
-        print("PASS: left AI tab, sub-dollar models, price and free-tier labels.", flush=True)
+        print("PASS: left AI tab, union of free-tier and either sub-dollar rate models, price and free-tier labels.", flush=True)
         print("PASS: key required, credential error, real model-list request contract and connection state.", flush=True)
 
         async def ask(question):

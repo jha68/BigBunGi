@@ -45,11 +45,18 @@ const TutorContext = createContext(null);
 
 export function GeminiProvider({ children }) {
   const [access, setAccess] = useState(null);
+  const accessPromise = useRef(null);
   useEffect(() => {
-    fetch(import.meta.env.BASE_URL + "content/model-access.json")
+    accessPromise.current = fetch(
+      import.meta.env.BASE_URL + "content/model-access.json",
+      { cache: "no-store", signal: AbortSignal.timeout(15000) },
+    )
       .then((r) => (r.ok ? r.json() : null))
-      .then(setAccess)
-      .catch(() => {});
+      .then((data) => {
+        setAccess(data);
+        return data;
+      })
+      .catch(() => null);
   }, []);
   // Credentials and conversation stay in memory, outside the app's saved state.
   const [keyDraft, setKeyDraft] = useState("");
@@ -85,12 +92,14 @@ export function GeminiProvider({ children }) {
     const timer = setTimeout(() => controller.abort(), 20000);
     setConnection({ status: "checking", error: "" });
     try {
-      const available = affordableModels(
-        await listModels(key, controller.signal),
-      );
+      const [listed, policy] = await Promise.all([
+        listModels(key, controller.signal),
+        accessPromise.current,
+      ]);
+      const available = affordableModels(listed, policy);
       if (!available.length)
         throw new Error(
-          "입력·출력 단가가 모두 $1 미만인 사용 가능 모델이 없습니다. 가격 미확인 모델도 제외됩니다.",
+          "무료 플랜 지원 또는 입력·출력 중 하나가 $1 미만인 사용 가능 모델이 없습니다.",
         );
       if (connecting.current !== controller) return;
       activeKey.current = key;
@@ -431,8 +440,8 @@ export function GeminiTutor({ problem, code, result, hidden }) {
               </div>
               <div className="gemini-price-info">
                 <p>
-                  입력·출력 모두 $1 미만만 표시 · 입력 단가 오름차순, 동률이면
-                  출력 단가순
+                  무료 플랜 지원 또는 입력·출력 중 하나라도 $1 미만 · 입력 단가
+                  오름차순, 동률이면 출력 단가순
                 </p>
                 <p>
                   {freeTierLabel(tutor.model, tutor.access)} · 공개 모델 정책
