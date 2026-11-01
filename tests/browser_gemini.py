@@ -41,6 +41,7 @@ async def main():
                 body = {"models": [
                     {"name": "models/gemini-flash-latest", "displayName": "Gemini Flash", "supportedGenerationMethods": ["generateContent"]},
                     {"name": "models/gemini-pro", "displayName": "Gemini Pro", "supportedGenerationMethods": ["generateContent"]},
+                    {"name": "models/gemini-2.5-flash-lite", "displayName": "Flash Lite", "supportedGenerationMethods": ["generateContent"]},
                     {"name": "models/gemini-2.5-pro", "displayName": "Gemini 2.5 Pro", "supportedGenerationMethods": ["generateContent"]},
                     {"name": "models/gemini-image", "displayName": "Image", "supportedGenerationMethods": ["generateContent"]},
                 ]}
@@ -60,15 +61,18 @@ async def main():
             except PlaywrightError:
                 if not release.is_set(): raise
 
+        async def access(route):
+            await route.fulfill(status=200,content_type="application/json",body=json.dumps({"source":"https://ai.google.dev/gemini-api/docs/pricing","models":{"gemini-2.5-flash-lite":{"available":True}}}))
+        await context.route("**/content/model-access.json", access)
         await context.route("https://cdn.jsdelivr.net/pyodide/**", cdn)
         await context.route("https://generativelanguage.googleapis.com/**", gemini)
         page = await context.new_page()
         page.on("pageerror", lambda error: errors.append(str(error)))
         await page.goto(os.environ.get("APP_URL", "http://127.0.0.1:4175/"), wait_until="networkidle")
         assert await page.locator(".page-intro, .practice-strip, .focus-timer, .dataset-callout, .topic-tags").count() == 0
-        assert not await page.get_by_role("tablist", name="문제 정보", exact=True).get_by_role("tab", name="AI 질문", exact=True).count()
-        result_tabs = page.get_by_role("tablist", name="실행·제출·AI 질문", exact=True)
-        assert [text.strip() for text in await result_tabs.get_by_role("tab").all_text_contents()] == ["실행 결과", "답안 제출", "AI 질문"]
+        assert await page.get_by_role("tablist", name="문제 정보", exact=True).get_by_role("tab", name="AI 질문", exact=True).count() == 1
+        result_tabs = page.get_by_role("tablist", name="실행과 제출", exact=True)
+        assert [text.strip() for text in await result_tabs.get_by_role("tab").all_text_contents()] == ["실행 결과", "답안 제출"]
         await page.wait_for_function("!document.querySelector('[data-testid=run-code]').disabled", timeout=120000)
         editor = page.get_by_role("textbox", name="Python 코드 편집기", exact=True)
 
@@ -80,8 +84,7 @@ async def main():
         await editor.press("Control+Enter")
         await page.get_by_test_id("python-error").wait_for()
         await page.get_by_role("tab", name="AI 질문", exact=True).click()
-        assert await page.locator(".results-panel .gemini-panel").count() == 1
-        assert await page.locator(".problem-body .scenario").is_visible(), "Problem must remain visible beside AI"
+        assert await page.locator(".problem-panel .gemini-panel").count() == 1
         assert await page.get_by_role("button", name="Gemini 질문 보내기").is_disabled()
         assert not requests, "API must not be called before key entry"
         await page.locator("#gemini-key").fill("invalid-test-key")
@@ -94,14 +97,12 @@ async def main():
         assert "USD/100만 토큰" in await page.locator(".gemini-inline-price").inner_text()
         await page.get_by_role("button", name="Gemini 연결 설정", exact=True).click()
         options = await page.locator("#gemini-model option").all_text_contents()
-        assert any("Gemini Flash" in text and "$0.75" in text and "$3.75" in text for text in options)
-        assert any("Gemini Pro" in text and "가격 확인 필요" in text for text in options)
-        await page.locator("#gemini-model").select_option("models/gemini-2.5-pro")
-        assert "200,000" in await page.locator(".gemini-price-info").inner_text()
-        assert "$15.00" in await page.locator(".gemini-inline-price").inner_text()
-        await page.locator("#gemini-model").select_option("models/gemini-flash-latest")
+        assert len(options) == 1, options
+        assert "Flash Lite" in options[0] and "$0.10" in options[0] and "$0.40" in options[0]
+        assert "무료 플랜 지원" in options[0]
+        assert "무료 플랜 지원" in await page.locator(".gemini-free-tier").inner_text()
         await page.get_by_role("button", name="설정 접기", exact=True).click()
-        print("PASS: model name/selector prices, units, long-context tier and unknown-price fallback.", flush=True)
+        print("PASS: left AI tab, sub-dollar models, price and free-tier labels.", flush=True)
         print("PASS: key required, credential error, real model-list request contract and connection state.", flush=True)
 
         async def ask(question):

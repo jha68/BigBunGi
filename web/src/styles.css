@@ -960,12 +960,6 @@ h1 > span {
   min-height: 260px;
   overflow: hidden;
 }
-.coding-panel.ai-active .code-editor {
-  flex: 0.8;
-}
-.coding-panel.ai-active .results-panel {
-  flex: 1.2;
-}
 .results-tabs {
   height: 44px;
   display: flex;

@@ -5,7 +5,46 @@ import {
   modelPriceLabel,
   modelPriceDetail,
   pricingSource,
+  affordableModels,
+  freeTierLabel,
 } from "../src/model-pricing.js";
+
+test("strict sub-dollar filter excludes expensive, unknown and long-context rates and sorts by input then output", () => {
+  const prices = {
+    a: { input: 0.2, output: 0.3 },
+    b: { input: 0.1, output: 0.9 },
+    c: { input: 0.1, output: 0.4 },
+    d: { input: 1, output: 0.1 },
+    e: { input: 0.1, output: 1 },
+    f: { input: 0.1, output: 0.4, longContext: { input: 2, output: 3 } },
+  };
+  const result = affordableModels(
+    ["a", "b", "c", "d", "e", "f", "unknown"].map((name) => ({ name })),
+    (name) => prices[name],
+  );
+  assert.deepEqual(
+    result.map((m) => m.name),
+    ["c", "b", "a"],
+  );
+  assert.deepEqual(
+    affordableModels([
+      { name: "models/gemini-2.5-flash-lite" },
+      { name: "models/gemini-flash-latest" },
+    ]).map((m) => m.name),
+    ["models/gemini-2.5-flash-lite"],
+  );
+});
+test("free-tier support is separate from model access and unknown is not free", () => {
+  assert.equal(
+    freeTierLabel("models/x", { models: { x: { available: true } } }),
+    "무료 플랜 지원",
+  );
+  assert.equal(
+    freeTierLabel("models/x", { models: { x: { available: false } } }),
+    "유료 전용",
+  );
+  assert.equal(freeTierLabel("models/x", null), "무료 지원 미확인");
+});
 
 test("prices show input/output separately in USD per million tokens", () => {
   assert.equal(

@@ -5,18 +5,18 @@
 .panel-tabs > button {
   flex-shrink: 0;
 }
-.results-tabs .gemini-tab {
+.panel-tabs .gemini-tab {
   color: #8c86b4;
 }
-.results-tabs .gemini-tab.active {
+.panel-tabs .gemini-tab.active {
   color: #7564bd;
 }
-.results-tabs .gemini-tab.active::after {
+.panel-tabs .gemini-tab.active::after {
   background: #8c78ca;
 }
-.result-content.gemini-mode {
+.problem-body.gemini-mode {
   padding: 0;
-  overflow: auto;
+  overflow: hidden;
   min-height: 0;
 }
 .gemini-panel {
@@ -74,6 +74,17 @@
 .gemini-inline-price {
   color: #9d8ab8;
   font-size: 8px;
+}
+.gemini-free-tier {
+  color: #a39aae;
+  font-size: 8px;
+  background: #f1eef5;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.gemini-free-tier.supported {
+  color: #7a9d87;
+  background: #edf5ef;
 }
 .gemini-heading > button {
   padding: 4px;

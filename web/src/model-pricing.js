@@ -2,6 +2,36 @@ import snapshot from "./gemini-prices.json" with { type: "json" };
 
 export const pricingSource = snapshot;
 
+export function affordableModels(models, lookup = modelPrice) {
+  const maximum = (price, field) =>
+    Math.max(price[field], price.longContext?.[field] ?? price[field]);
+  return models
+    .filter((model) => {
+      const price = lookup(model.name);
+      return (
+        price && maximum(price, "input") < 1 && maximum(price, "output") < 1
+      );
+    })
+    .sort((a, b) => {
+      const x = lookup(a.name),
+        y = lookup(b.name);
+      return (
+        maximum(x, "input") - maximum(y, "input") ||
+        maximum(x, "output") - maximum(y, "output") ||
+        a.name.localeCompare(b.name)
+      );
+    });
+}
+
+export function freeTierLabel(name, access) {
+  const entry = access?.models?.[(name || "").replace(/^models\//, "")];
+  return entry?.available === true
+    ? "무료 플랜 지원"
+    : entry?.available === false
+      ? "유료 전용"
+      : "무료 지원 미확인";
+}
+
 export function modelPrice(name) {
   const id = (name || "").replace(/^models\//, "");
   return Object.hasOwn(snapshot.models, id) ? snapshot.models[id] : null;

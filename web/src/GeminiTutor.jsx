@@ -30,6 +30,8 @@ import {
   modelPriceLabel,
   modelPriceDetail,
   pricingSource,
+  affordableModels,
+  freeTierLabel,
 } from "./model-pricing.js";
 import {
   askGemini,
@@ -42,6 +44,13 @@ import "./gemini.css";
 const TutorContext = createContext(null);
 
 export function GeminiProvider({ children }) {
+  const [access, setAccess] = useState(null);
+  useEffect(() => {
+    fetch(import.meta.env.BASE_URL + "content/model-access.json")
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setAccess)
+      .catch(() => {});
+  }, []);
   // Credentials and conversation stay in memory, outside the app's saved state.
   const [keyDraft, setKeyDraft] = useState("");
   const [connection, setConnection] = useState({ status: "idle", error: "" });
@@ -76,11 +85,17 @@ export function GeminiProvider({ children }) {
     const timer = setTimeout(() => controller.abort(), 20000);
     setConnection({ status: "checking", error: "" });
     try {
-      const available = await listModels(key, controller.signal);
+      const available = affordableModels(
+        await listModels(key, controller.signal),
+      );
+      if (!available.length)
+        throw new Error(
+          "입력·출력 단가가 모두 $1 미만인 사용 가능 모델이 없습니다. 가격 미확인 모델도 제외됩니다.",
+        );
       if (connecting.current !== controller) return;
       activeKey.current = key;
       setModels(available);
-      setModel(preferredModel(available));
+      setModel(available[0].name);
       setConnection({ status: "ready", error: "" });
     } catch (error) {
       if (connecting.current !== controller) return;
@@ -202,6 +217,7 @@ export function GeminiProvider({ children }) {
   return (
     <TutorContext.Provider
       value={{
+        access,
         keyDraft,
         updateKey,
         connection,
@@ -322,6 +338,11 @@ export function GeminiTutor({ problem, code, result, hidden }) {
                 >
                   {modelPriceLabel(tutor.model, true)}
                 </span>
+                <span
+                  className={`gemini-free-tier ${freeTierLabel(tutor.model, tutor.access) === "무료 플랜 지원" ? "supported" : ""}`}
+                >
+                  {freeTierLabel(tutor.model, tutor.access)}
+                </span>
               </>
             ) : (
               "내 문제와 코드를 함께 보는 AI"
@@ -399,7 +420,8 @@ export function GeminiTutor({ problem, code, result, hidden }) {
                 >
                   {tutor.models.map((model) => (
                     <option key={model.name} value={model.name}>
-                      {model.label} · {modelPriceLabel(model.name)}
+                      {model.label} · {modelPriceLabel(model.name)} ·{" "}
+                      {freeTierLabel(model.name, tutor.access)}
                     </option>
                   ))}
                 </select>
@@ -408,6 +430,21 @@ export function GeminiTutor({ problem, code, result, hidden }) {
                 </button>
               </div>
               <div className="gemini-price-info">
+                <p>
+                  입력·출력 모두 $1 미만만 표시 · 입력 단가 오름차순, 동률이면
+                  출력 단가순
+                </p>
+                <p>
+                  {freeTierLabel(tutor.model, tutor.access)} · 공개 모델 정책
+                  기준이며, 키별 지역·할당량·잔여 무료 한도는 별도입니다.
+                </p>
+                <a
+                  href={tutor.access?.source || pricingSource.officialUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  무료 플랜 공식 안내
+                </a>
                 <p>{modelPriceDetail(tutor.model)}</p>
                 <small>
                   무료 한도·캐시·배치 요금은 별도이며, latest 별칭의 가격은

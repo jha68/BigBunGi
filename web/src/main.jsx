@@ -711,6 +711,17 @@ function App() {
                     <FileCode2 size={14} />
                     노트
                   </button>
+                  <button
+                    role="tab"
+                    aria-selected={leftTab === "ai"}
+                    className={
+                      leftTab === "ai" ? "active gemini-tab" : "gemini-tab"
+                    }
+                    onClick={() => setLeftTab("ai")}
+                  >
+                    <Sparkles size={14} />
+                    AI 질문
+                  </button>
                   {solutions[selected] && (
                     <button
                       role="tab"
@@ -722,7 +733,16 @@ function App() {
                     </button>
                   )}
                 </div>
-                <div className="problem-body">
+                <div
+                  className={`problem-body ${leftTab === "ai" ? "gemini-mode" : ""}`}
+                >
+                  <GeminiTutor
+                    problem={problem}
+                    code={currentCode}
+                    result={result}
+                    hidden={leftTab !== "ai"}
+                  />
+
                   {leftTab === "problem" && (
                     <>
                       <div className="section-label">문제 설명</div>
@@ -941,9 +961,7 @@ function App() {
                   <span>직접 만든 시험형 연습문제</span>
                 </footer>
               </div>
-              <div
-                className={`coding-panel ${bottomTab === "ai" ? "ai-active" : ""}`}
-              >
+              <div className="coding-panel">
                 <div className="editor-topbar">
                   <div className="file-tab">
                     <FileCode2 size={16} />
@@ -1033,7 +1051,7 @@ function App() {
                 </div>
                 <div className="results-panel">
                   <div className="results-tabs">
-                    <div role="tablist" aria-label="실행·제출·AI 질문">
+                    <div role="tablist" aria-label="실행과 제출">
                       <button
                         role="tab"
                         aria-selected={bottomTab === "output"}
@@ -1056,21 +1074,8 @@ function App() {
                           <CheckCircle2 size={13} className="solved-icon" />
                         )}
                       </button>
-                      <button
-                        role="tab"
-                        aria-selected={bottomTab === "ai"}
-                        className={
-                          bottomTab === "ai"
-                            ? "active gemini-tab"
-                            : "gemini-tab"
-                        }
-                        onClick={() => setBottomTab("ai")}
-                      >
-                        <Sparkles size={14} />
-                        AI 질문
-                      </button>
                     </div>
-                    {result && bottomTab !== "ai" && (
+                    {result && (
                       <span
                         className={`execution-badge ${result.error ? "failed" : "success"}`}
                       >
@@ -1085,16 +1090,7 @@ function App() {
                       </span>
                     )}
                   </div>
-                  <div
-                    className={`result-content ${bottomTab === "ai" ? "gemini-mode" : ""}`}
-                    aria-live={bottomTab === "ai" ? "off" : "polite"}
-                  >
-                    <GeminiTutor
-                      problem={problem}
-                      code={currentCode}
-                      result={result}
-                      hidden={bottomTab !== "ai"}
-                    />
+                  <div className="result-content" aria-live="polite">
                     {bottomTab === "output" &&
                       (!result ? (
                         running?.id === selected ? (
@@ -1350,29 +1346,27 @@ function App() {
                       </div>
                     )}
                   </div>
-                  {bottomTab !== "ai" && (
-                    <div className="submission-bar">
-                      <span>
-                        <ShieldCheck size={13} />
-                        {problem.type === 2
-                          ? "예측값은 정답 데이터로 평가합니다"
-                          : "반올림 오차를 고려해 채점합니다"}
-                      </span>
-                      <button
-                        className="grade-button"
-                        data-testid="grade-code"
-                        disabled={!!running || grading}
-                        onClick={grade}
-                      >
-                        {grading ? (
-                          <Loader2 size={14} className="spin" />
-                        ) : (
-                          <Check size={15} />
-                        )}
-                        채점하기
-                      </button>
-                    </div>
-                  )}
+                  <div className="submission-bar">
+                    <span>
+                      <ShieldCheck size={13} />
+                      {problem.type === 2
+                        ? "예측값은 정답 데이터로 평가합니다"
+                        : "반올림 오차를 고려해 채점합니다"}
+                    </span>
+                    <button
+                      className="grade-button"
+                      data-testid="grade-code"
+                      disabled={!!running || grading}
+                      onClick={grade}
+                    >
+                      {grading ? (
+                        <Loader2 size={14} className="spin" />
+                      ) : (
+                        <Check size={15} />
+                      )}
+                      채점하기
+                    </button>
+                  </div>
                 </div>
               </div>
             </section>
