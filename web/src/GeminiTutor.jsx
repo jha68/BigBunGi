@@ -128,7 +128,8 @@ export function GeminiProvider({ children }) {
     if (!question.trim()) return "질문을 입력해 주세요.";
     if (question.length > 4000) return "질문은 4,000자 이내로 입력해 주세요.";
     const pid = problem.id,
-      id = retryId || crypto.randomUUID(),
+      id = retryId || globalThis.crypto?.randomUUID?.() ||
+        `turn-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       controller = new AbortController();
     const history = (turns[pid] || []).filter(
       (turn) => turn.id !== retryId && turn.answer && !turn.error,

@@ -17,6 +17,8 @@ async def main():
         browser = await p.chromium.launch(executable_path=os.environ.get("CHROMIUM_PATH", "/usr/bin/chromium"), headless=True,
             proxy={"server": os.environ["HTTPS_PROXY"], "bypass": "localhost,127.0.0.1"} if os.environ.get("HTTPS_PROXY") else None)
         context = await browser.new_context(viewport={"width": 1512, "height": 1080})
+        # randomUUID is unavailable on an HTTP origin; IDs must still work.
+        await context.add_init_script("Object.defineProperty(crypto, 'randomUUID', {value: undefined});")
         errors, requests = [], []
         release = asyncio.Event()
         quota_once = False
