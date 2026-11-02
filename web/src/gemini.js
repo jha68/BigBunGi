@@ -238,20 +238,19 @@ async function readGeminiStream(response, apiKey, onText) {
     finish = "",
     displayed = "";
   const publish = (final = false) => {
-    let visible = text;
+    let visible = redact(text, apiKey);
     // Hold a possible partial API key until it can be redacted across frames.
     if (!final && apiKey)
       for (
-        let size = Math.min(apiKey.length - 1, text.length);
+        let size = Math.min(apiKey.length - 1, visible.length);
         size > 0;
         size--
       ) {
-        if (text.endsWith(apiKey.slice(0, size))) {
-          visible = text.slice(0, -size);
+        if (visible.endsWith(apiKey.slice(0, size))) {
+          visible = visible.slice(0, -size);
           break;
         }
       }
-    visible = redact(visible, apiKey);
     if (visible !== displayed) {
       displayed = visible;
       onText(visible);

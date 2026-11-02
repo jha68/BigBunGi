@@ -101,3 +101,14 @@ test("broken streams retain delivered text but never count as a completed answer
     /사용 한도/,
   );
 });
+
+test("complete keys with overlapping prefix and suffix are masked before partial-key holdback", async () => {
+  const apiKey = "A-test-secret-A",
+    seen = [];
+  const result = await askGemini(
+    { ...params, apiKey, onText: (text) => seen.push(text) },
+    async () => new Response(frame("answer: " + apiKey, "STOP")),
+  );
+  assert.equal(result.text, "answer: [API_KEY_REDACTED]");
+  assert.deepEqual(seen, ["answer: [API_KEY_REDACTED]"]);
+});
