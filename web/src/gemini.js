@@ -137,7 +137,9 @@ export function makeNoteRequest({ history = [], apiKey = "" }) {
         ],
         generationConfig: {
           temperature: 0.1,
-          maxOutputTokens: Math.min(4096, conversations.length * 256 + 128),
+          // Thinking models share this budget with reasoning; brevity comes
+          // from NOTE_PROMPT so a short summary still has room to finish.
+          maxOutputTokens: 8192,
         },
       }),
       apiKey,
