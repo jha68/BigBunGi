@@ -17,7 +17,7 @@ const state = {
 };
 let mf, db, cookie;
 const call = (path, method = "GET", body, auth = cookie, extra = {}) =>
-  mf.dispatchFetch("https://api.bigbungi.junununseo.com" + path, {
+  mf.dispatchFetch("https://bigbungi-api.junununseo.com" + path, {
     method,
     headers: {
       Origin: origin,

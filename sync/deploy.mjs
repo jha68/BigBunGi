@@ -24,7 +24,7 @@ if (process.env.SYNC_FREE_PLAN_CONFIRMED !== "true")
     "Deployment stopped before creating resources: first verify that this account uses Workers/D1 Free, then set SYNC_FREE_PLAN_CONFIRMED=true. Paid plans are not supported by this setup.",
   );
 const root = fileURLToPath(new URL(".", import.meta.url));
-const domain = "api.bigbungi.junununseo.com";
+const domain = "bigbungi-api.junununseo.com";
 function configurationError(message) {
   // Surface the actionable cause in the Actions summary without secret values.
   console.error(`::error title=Sync configuration::${message}`);

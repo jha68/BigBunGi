@@ -35,7 +35,7 @@
 
 1. 서버·화면 테스트 실행.
 2. `bigbungi-sync` D1 데이터베이스를 생성하거나 기존 데이터베이스 재사용. 기존 기록은 삭제하지 않음.
-3. `bigbungi-sync` Worker와 `api.bigbungi.junununseo.com` 사용자 지정 도메인 연결. Cloudflare가 API 도메인의 DNS를 관리하며, 기존 앱 도메인의 레코드는 유지.
+3. `bigbungi-sync` Worker와 `bigbungi-api.junununseo.com` 사용자 지정 도메인 연결. Cloudflare가 API 도메인의 DNS를 관리하며, 기존 앱 도메인의 레코드는 유지.
 4. 비밀번호를 계정별 salt와 PBKDF2-SHA256으로 해시하여 Worker secret으로 배포. 원문 비밀번호·관리 토큰은 화면 파일에 포함하지 않음.
 5. 실제 HTTPS 로그인과 인증된 기록 조회를 확인한 후, 로그인 화면이 활성화된 GitHub Pages 빌드 배포. 관리 권한·도메인 연결 검증에 실패하면 활성화하지 않음.
 
@@ -51,7 +51,7 @@
 - 서버 세션은 HttpOnly·Secure·SameSite=Strict 쿠키로 관리하며 7일 후 만료됩니다. 로그아웃하면 서버 세션과 Gemini 메모리 상태를 지웁니다. 브라우저 백업은 보존되며, 공용 기기에서는 사용 후 브라우저 사이트 데이터도 지워 주세요.
 - GitHub Pages의 문제·데이터 파일은 공개 상태를 유지합니다. 비밀번호는 학습 기록 API 접근을 보호하며, 정적 파일 자체를 비공개로 바꾸지는 않습니다.
 
-서버 테스트: `cd sync && npm ci && npm test`. 실제 Worker 런타임과 로컬 D1에서 인증·충돌·로그아웃·만료·로그인 시도 제한을 검사합니다. 두 브라우저 통합 테스트는 `VITE_SYNC_API_URL=https://api.bigbungi.junununseo.com npm run build --prefix web` 후 `web/dist`를 4195번 포트로 제공하고, `node sync/test-server.mjs`와 `.venv/bin/python tests/browser_sync.py`를 실행합니다. 외부 Cloudflare 계정이나 실제 비밀번호를 사용하지 않습니다.
+서버 테스트: `cd sync && npm ci && npm test`. 실제 Worker 런타임과 로컬 D1에서 인증·충돌·로그아웃·만료·로그인 시도 제한을 검사합니다. 두 브라우저 통합 테스트는 `VITE_SYNC_API_URL=https://bigbungi-api.junununseo.com npm run build --prefix web` 후 `web/dist`를 4195번 포트로 제공하고, `node sync/test-server.mjs`와 `.venv/bin/python tests/browser_sync.py`를 실행합니다. 외부 Cloudflare 계정이나 실제 비밀번호를 사용하지 않습니다.
 
 ## Gemini 질문하기
 

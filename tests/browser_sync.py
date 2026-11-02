@@ -1,6 +1,6 @@
 """Real Worker + D1 integration with two browser sessions; no Cloudflare credentials.
 
-Build web with VITE_SYNC_API_URL=https://api.bigbungi.junununseo.com, serve its
+Build web with VITE_SYNC_API_URL=https://bigbungi-api.junununseo.com, serve its
 dist at :4195, and run `node sync/test-server.mjs` before this script.
 """
 import asyncio
@@ -9,7 +9,7 @@ import urllib.request
 from playwright.async_api import async_playwright
 
 ORIGIN = "https://bigbungi.junununseo.com"
-API = "https://api.bigbungi.junununseo.com"
+API = "https://bigbungi-api.junununseo.com"
 PASSWORD = "test-only-sync-password"
 STORAGE = "bigbungi.practice.v1"
 
