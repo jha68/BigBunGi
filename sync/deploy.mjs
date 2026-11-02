@@ -136,7 +136,15 @@ try {
   wrangler(["deploy", "--config", config, "--secrets-file", secrets]);
   // Smoke test real authentication without printing passwords or session cookies.
   let verified = false;
-  for (let attempt = 0; attempt < 8; attempt++) {
+  let lastFailure = "unknown";
+  const responseFailure = async (stage, response) => {
+    const body = safeDiagnostic(await response.text(), sensitive);
+    const detail = body.match(/<title>([\s\S]*?)<\/title>/i)?.[1] || body;
+    return new Error(
+      `${stage} HTTP ${response.status}: ${detail.slice(0, 800)}`,
+    );
+  };
+  for (let attempt = 0; attempt < 24; attempt++) {
     try {
       const response = await fetch(`https://${domain}/login`, {
         method: "POST",
@@ -147,13 +155,15 @@ try {
         body: JSON.stringify({ password }),
         signal: AbortSignal.timeout(12000),
       });
-      if (!response.ok) throw new Error("Login not ready");
+      if (!response.ok) throw await responseFailure("Login", response);
       const cookie = response.headers.get("set-cookie")?.split(";")[0];
+      if (!cookie) throw new Error("Login returned no session cookie");
+      sensitive.push(cookie, cookie.slice(cookie.indexOf("=") + 1));
       const state = await fetch(`https://${domain}/state`, {
         headers: { Cookie: cookie },
         signal: AbortSignal.timeout(12000),
       });
-      if (!state.ok) throw new Error("State unavailable");
+      if (!state.ok) throw await responseFailure("Authenticated state", state);
       await fetch(`https://${domain}/logout`, {
         method: "POST",
         headers: { Cookie: cookie, Origin: "https://bigbungi.junununseo.com" },
@@ -161,14 +171,25 @@ try {
       });
       verified = true;
       break;
-    } catch {
-      if (attempt < 7)
-        await new Promise((resolve) => setTimeout(resolve, 5000));
+    } catch (error) {
+      lastFailure = `${error.message}${error.cause?.code ? " (" + error.cause.code + ")" : ""}`;
+      if (attempt === 0 || attempt % 6 === 5)
+        console.log(
+          `::notice::Waiting for sync HTTPS: ${safeDiagnostic(
+            lastFailure,
+            sensitive,
+          )
+            .replace(/[\r\n]/g, " ")
+            .slice(0, 900)}`,
+        );
+      if (/Login HTTP (400|401|403|429):/.test(lastFailure)) break;
+      if (attempt < 23)
+        await new Promise((resolve) => setTimeout(resolve, 10000));
     }
   }
   if (!verified)
     throw new Error(
-      "Sync HTTPS/login verification failed; frontend password login has not been enabled.",
+      `Sync HTTPS/login verification failed: ${lastFailure}. Frontend password login has not been enabled.`,
     );
   if (process.env.GITHUB_OUTPUT)
     await appendFile(process.env.GITHUB_OUTPUT, `api_url=https://${domain}\n`);
