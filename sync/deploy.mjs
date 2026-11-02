@@ -5,10 +5,20 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import {
+  safeDiagnostic,
+  errorAnnotation,
+  commandFailure,
+} from "./diagnostics.mjs";
 
 const account = process.env.CLOUDFLARE_ACCOUNT_ID;
 const token = process.env.CLOUDFLARE_API_TOKEN;
 const password = process.env.SYNC_PASSWORD;
+const sensitive = [account, token, password];
+process.on("uncaughtException", (error) => {
+  console.error(errorAnnotation(error.message, sensitive));
+  process.exit(1);
+});
 if (process.env.SYNC_FREE_PLAN_CONFIRMED !== "true")
   throw new Error(
     "Deployment stopped before creating resources: first verify that this account uses Workers/D1 Free, then set SYNC_FREE_PLAN_CONFIRMED=true. Paid plans are not supported by this setup.",
@@ -51,7 +61,7 @@ const api = async (path, data) => {
   const body = await response.json();
   if (!response.ok || !body.success)
     throw new Error(
-      `Cloudflare setup failed (HTTP ${response.status}); check token permissions and account ID.`,
+      `Cloudflare ${path.split("?")[0]} failed (HTTP ${response.status}): ${JSON.stringify(body.errors || [])}. Check token permissions and account ID.`,
     );
   return body.result;
 };
@@ -64,14 +74,18 @@ const wrangler = (args, input) => {
       env: process.env,
       input,
       encoding: "utf8",
-      stdio: ["pipe", "inherit", "inherit"],
+      stdio: ["pipe", "pipe", "pipe"],
+      maxBuffer: 10 * 1024 * 1024,
     },
   );
+  if (run.stdout) process.stdout.write(safeDiagnostic(run.stdout, sensitive));
+  if (run.stderr) process.stderr.write(safeDiagnostic(run.stderr, sensitive));
   if (run.status !== 0)
-    throw new Error("Cloudflare deployment command failed.");
+    throw new Error(commandFailure(args[0], run.stdout, run.stderr));
 };
 const dir = await mkdtemp(join(tmpdir(), "bigbungi-sync-"));
 try {
+  console.log("::notice::Sync setup: checking Cloudflare D1 access.");
   const databases = await api("/d1/database?name=bigbungi-sync");
   const database =
     databases.find((entry) => entry.name === "bigbungi-sync") ||
@@ -114,6 +128,7 @@ try {
     .digest()
     .subarray(0, 16);
   const hash = `pbkdf2-100000:${salt.toString("hex")}:${pbkdf2Sync(password, salt, 100000, 32, "sha256").toString("hex")}`;
+  sensitive.push(hash);
   const secrets = join(dir, "secrets.json");
   await writeFile(secrets, JSON.stringify({ PASSWORD_HASH: hash }), {
     mode: 0o600,
