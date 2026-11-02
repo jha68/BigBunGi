@@ -15,15 +15,25 @@ if (process.env.SYNC_FREE_PLAN_CONFIRMED !== "true")
   );
 const root = fileURLToPath(new URL(".", import.meta.url));
 const domain = "api.bigbungi.junununseo.com";
-if (
-  !account ||
-  !token ||
-  !password ||
-  password.length < 12 ||
-  password.length > 128
-)
-  throw new Error(
-    "Set CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN and SYNC_PASSWORD (12–128 characters) as repository Actions secrets.",
+function configurationError(message) {
+  // Surface the actionable cause in the Actions summary without secret values.
+  console.error(`::error title=Sync configuration::${message}`);
+  process.exit(1);
+}
+const missing = [
+  ["CLOUDFLARE_ACCOUNT_ID", account],
+  ["CLOUDFLARE_API_TOKEN", token],
+  ["SYNC_PASSWORD", password],
+]
+  .filter(([, value]) => !value)
+  .map(([name]) => name);
+if (missing.length)
+  configurationError(
+    `Missing repository Actions secret: ${missing.join(", ")}. Add each secret separately using its exact name.`,
+  );
+if (password.length < 12 || password.length > 128)
+  configurationError(
+    "SYNC_PASSWORD must contain 12-128 characters. Update only the SYNC_PASSWORD repository Actions secret, then rerun this workflow. Cloudflare has not been contacted.",
   );
 const api = async (path, data) => {
   const response = await fetch(
