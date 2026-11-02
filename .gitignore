@@ -4,6 +4,8 @@ __pycache__/
 .pytest_cache/
 .runtime/
 web/node_modules/
+sync/node_modules/
+sync/.wrangler/
 web/dist/
 web/public/content/
 playwright-report/

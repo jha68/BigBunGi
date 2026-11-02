@@ -12,8 +12,46 @@
 - 코드 편집기, `Ctrl/Cmd+Enter` 실행, stdout·경고·Python traceback, 데이터프레임·그래프 표시, 실행 중지와 60초 제한.
 - 선택 영역의 파란색 강조·테두리, 줄 번호·Python 문법 강조·자동 줄바꿈이 있는 읽기 전용 기준 풀이.
 - 데이터 미리보기·변수 설명·CSV 다운로드, 단계별 힌트, 기준 풀이, 풀이 노트, 진행률, 모바일 화면.
-- 코드·노트·진행률은 브라우저의 localStorage에 자동 저장됩니다. 다른 기기·브라우저로 동기화되지는 않습니다.
+- 코드·답안·노트·진행률을 브라우저에 자동 저장합니다. 개인용 비밀번호 로그인·기기 간 동기화도 지원하며, 아래 Cloudflare 최초 설정을 완료해야 활성화됩니다.
 - **Gemini 튜터:** 현재 문제·작성 중인 코드·실행 결과를 첨부하는 문제별 AI 대화. 개인 API 키, 모델 선택, 코드 문법 강조, 오류 안내·재시도·응답 중지.
+
+## 개인용 비밀번호 로그인 / 기기 간 동기화
+
+**Cloudflare 최초 연결을 완료하기 전에는 기존 브라우저 저장 모드로 동작합니다.** 비밀번호 창만 띄워 놓고 서버에 저장되는 것처럼 표시하지 않습니다. GitHub Pages는 화면·문제·데이터를 계속 제공하고, Cloudflare Worker와 D1이 개인용 로그인과 기록 저장을 담당합니다.
+
+[저장소 Actions secrets](https://github.com/jha68/BigBunGi/settings/secrets/actions)에 다음 세 값을 등록합니다. 비밀번호와 토큰을 채팅·소스 코드·일반 repository variables에 입력하지 마세요.
+
+| Secret 이름 | 등록할 값 |
+| --- | --- |
+| `CLOUDFLARE_ACCOUNT_ID` | `junununseo.com`을 관리하는 Cloudflare 계정의 Account ID |
+| `CLOUDFLARE_API_TOKEN` | 해당 계정의 Workers Scripts 편집·D1 편집·Account Settings 조회, 해당 도메인의 Zone 조회·Workers Routes 편집·DNS 편집 권한이 있는 토큰 |
+| `SYNC_PASSWORD` | 앱에 로그인할 개인용 비밀번호. 12–128자. |
+
+토큰은 [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens)에서 만들고, 리소스는 해당 계정과 `junununseo.com`으로 제한합니다. Account ID는 Cloudflare 도메인 Overview에서 확인합니다. 토큰은 서버와 데이터베이스를 생성하기 위한 관리 권한이며, 웹앱 방문자에게 전달되지 않습니다.
+
+이 기능은 **Workers/D1 Free 플랜 전용**으로 운영합니다. Cloudflare 대시보드에서 Workers 플랜이 Free인지 확인한 다음, [저장소 Actions variables](https://github.com/jha68/BigBunGi/settings/variables/actions)에 `SYNC_FREE_PLAN_CONFIRMED` = `true`를 등록합니다. 계정이 이미 Workers Paid이면 등록하지 마세요. 무료 확인 표시가 없으면 secret을 모두 등록해도 서버 리소스를 만들지 않습니다. 이 표시는 사용자가 대시보드에서 확인했다는 뜻이며, 청구 정보를 API로 자동 판정하는 기능은 아닙니다. 스크립트는 플랜 업그레이드·유료 구독·결제 등록을 수행하지 않습니다. Free 플랜의 한도를 넘으면 Cloudflare의 무료 한도 제한에 따라 동기화가 실패할 수 있으며, 브라우저 기록은 남습니다. 기존 Gemini API 요청의 모델별 요금은 별도입니다.
+
+등록 후 [Actions](https://github.com/jha68/BigBunGi/actions/workflows/pages.yml) → **Run workflow**를 실행합니다. 기존 배포 절차가 다음을 자동으로 수행합니다.
+
+1. 서버·화면 테스트 실행.
+2. `bigbungi-sync` D1 데이터베이스를 생성하거나 기존 데이터베이스 재사용. 기존 기록은 삭제하지 않음.
+3. `bigbungi-sync` Worker와 `api.bigbungi.junununseo.com` 사용자 지정 도메인 연결. Cloudflare가 API 도메인의 DNS를 관리하며, 기존 앱 도메인의 레코드는 유지.
+4. 비밀번호를 계정별 salt와 PBKDF2-SHA256으로 해시하여 Worker secret으로 배포. 원문 비밀번호·관리 토큰은 화면 파일에 포함하지 않음.
+5. 실제 HTTPS 로그인과 인증된 기록 조회를 확인한 후, 로그인 화면이 활성화된 GitHub Pages 빌드 배포. 관리 권한·도메인 연결 검증에 실패하면 활성화하지 않음.
+
+이후에는 일반 작업 재배포 시 서버와 화면을 함께 갱신합니다. 비밀번호를 바꾸려면 `SYNC_PASSWORD` secret을 수정하고 다시 배포합니다. 이전 비밀번호로 발급한 세션은 새 비밀번호에서 무효가 됩니다. 세 secret 중 일부만 있는 경우에는 불완전한 설정으로 보고 배포를 중단합니다. 모두 없을 때는 기존 브라우저 저장 모드가 유지됩니다. **활성화 후 secret 세 개를 모두 삭제하면 다음 배포는 브라우저 저장 모드로 전환되므로, 로그인 유지가 필요하다면 삭제하지 마세요.**
+
+사용 흐름은 다음과 같습니다.
+
+- 비밀번호로 로그인하면 서버에 저장한 코드·입력 답안·풀이 노트·문제별 통과 여부와 진행도를 복원합니다. Gemini 키와 AI 대화는 동기화하지 않습니다.
+- 첫 연결 시 기존 브라우저 기록을 서버로 가져올 수 있습니다. 서버와 브라우저 기록이 다르면 선택 전에 양쪽 기록을 파일로 백업할 수 있습니다.
+- 수정 후 약 0.8초 뒤 서버 저장을 시도하며, 상단의 **서버 저장됨** 표시로 완료 여부를 확인합니다. 최대 기록 크기는 요청당 1MB입니다.
+- 네트워크 오류·세션 만료 시 브라우저 기록을 유지합니다. 다시 저장하거나 로그인 후 이어갈 수 있습니다. 기기를 바꾸기 전에는 저장 완료를 확인하세요.
+- 두 기기가 같은 서버 버전에서 수정한 경우, 나중 저장은 충돌로 처리하며 자동으로 덮어쓰지 않습니다. 현재 기록 백업, 서버 기록 선택, 명시적인 서버 덮어쓰기를 지원합니다. 열린 다른 기기에 변경 사항을 실시간 반영하지는 않습니다.
+- 서버 세션은 HttpOnly·Secure·SameSite=Strict 쿠키로 관리하며 7일 후 만료됩니다. 로그아웃하면 서버 세션과 Gemini 메모리 상태를 지웁니다. 브라우저 백업은 보존되며, 공용 기기에서는 사용 후 브라우저 사이트 데이터도 지워 주세요.
+- GitHub Pages의 문제·데이터 파일은 공개 상태를 유지합니다. 비밀번호는 학습 기록 API 접근을 보호하며, 정적 파일 자체를 비공개로 바꾸지는 않습니다.
+
+서버 테스트: `cd sync && npm ci && npm test`. 실제 Worker 런타임과 로컬 D1에서 인증·충돌·로그아웃·만료·로그인 시도 제한을 검사합니다. 두 브라우저 통합 테스트는 `VITE_SYNC_API_URL=https://api.bigbungi.junununseo.com npm run build --prefix web` 후 `web/dist`를 4195번 포트로 제공하고, `node sync/test-server.mjs`와 `.venv/bin/python tests/browser_sync.py`를 실행합니다. 외부 Cloudflare 계정이나 실제 비밀번호를 사용하지 않습니다.
 
 ## Gemini 질문하기
 

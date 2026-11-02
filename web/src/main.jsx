@@ -41,6 +41,7 @@ import {
   GeminiNoteGenerator,
 } from "./GeminiTutor.jsx";
 import { gradeNumeric, gradePrediction } from "./grading.js";
+import SyncGate, { SyncStatus } from "./SyncGate.jsx";
 import "./styles.css";
 
 const BASE = import.meta.env.BASE_URL;
@@ -125,17 +126,17 @@ function DataTable({ columns, rows }) {
   );
 }
 
-function App() {
+function App({ initialState = initial, onStateChange, syncControls }) {
   const [catalog, setCatalog] = useState([]),
     [selected, setSelected] = useState(
-      location.hash.slice(1) || initial.selected || "t1-01",
+      location.hash.slice(1) || initialState.selected || "t1-01",
     );
   const [problem, setProblem] = useState(null),
     [fetchError, setFetchError] = useState("");
-  const [drafts, setDrafts] = useState(initial.drafts || {}),
-    [answers, setAnswers] = useState(initial.answers || {}),
-    [notes, setNotes] = useState(initial.notes || {}),
-    [progress, setProgress] = useState(initial.progress || {});
+  const [drafts, setDrafts] = useState(initialState.drafts || {}),
+    [answers, setAnswers] = useState(initialState.answers || {}),
+    [notes, setNotes] = useState(initialState.notes || {}),
+    [progress, setProgress] = useState(initialState.progress || {});
   const [leftTab, setLeftTab] = useState("problem"),
     [bottomTab, setBottomTab] = useState("output");
   const [solutions, setSolutions] = useState({}),
@@ -214,7 +215,8 @@ function App() {
         "브라우저 저장 공간이 부족해 자동 저장하지 못했습니다. 코드를 다운로드해 주세요.",
       );
     }
-  }, [drafts, answers, notes, progress, selected, notify]);
+    onStateChange?.({ drafts, answers, notes, progress, selected });
+  }, [drafts, answers, notes, progress, selected, notify, onStateChange]);
 
   const startWorker = useCallback(() => {
     worker.current?.terminate();
@@ -625,10 +627,14 @@ function App() {
             <strong>작업형 {kind}유형</strong>
           </div>
           <div className="topbar-right">
-            <span className="autosave">
-              <span />
-              자동 저장됨
-            </span>
+            {syncControls ? (
+              <SyncStatus controls={syncControls} />
+            ) : (
+              <span className="autosave">
+                <span />
+                자동 저장됨
+              </span>
+            )}
             <a
               href="https://github.com/jha68/BigBunGi"
               target="_blank"
@@ -1434,7 +1440,15 @@ function App() {
 }
 
 createRoot(document.getElementById("root")).render(
-  <GeminiProvider>
-    <App />
-  </GeminiProvider>,
+  <SyncGate initialState={initial}>
+    {(restored, onStateChange, syncControls) => (
+      <GeminiProvider>
+        <App
+          initialState={restored}
+          onStateChange={onStateChange}
+          syncControls={syncControls}
+        />
+      </GeminiProvider>
+    )}
+  </SyncGate>,
 );

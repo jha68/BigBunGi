@@ -34,8 +34,35 @@ jobs:
         working-directory: web
       - run: npm test
         working-directory: web
+      - run: npm ci
+        working-directory: sync
+      - run: npm test
+        working-directory: sync
+      - name: Deploy personal record storage when configured
+        id: sync
+        working-directory: sync
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          SYNC_PASSWORD: ${{ secrets.SYNC_PASSWORD }}
+          SYNC_FREE_PLAN_CONFIRMED: ${{ vars.SYNC_FREE_PLAN_CONFIRMED }}
+        run: |
+          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ] && [ -n "$SYNC_PASSWORD" ]; then
+            if [ "$SYNC_FREE_PLAN_CONFIRMED" = "true" ]; then
+              npm run deploy
+            else
+              echo "::warning::No sync resources created: verify Workers/D1 Free and set the repository variable SYNC_FREE_PLAN_CONFIRMED=true to enable deployment."
+            fi
+          elif [ -n "$CLOUDFLARE_API_TOKEN$CLOUDFLARE_ACCOUNT_ID$SYNC_PASSWORD" ]; then
+            echo "::error::Sync setup is incomplete: all three repository Actions secrets are required."
+            exit 1
+          else
+            echo "::notice::Sync backend is not configured. Existing browser storage remains available."
+          fi
       - run: npm run build
         working-directory: web
+        env:
+          VITE_SYNC_API_URL: ${{ steps.sync.outputs.api_url }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web/dist

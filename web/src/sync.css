@@ -1,0 +1,121 @@
+.sync-screen,
+.sync-overlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  padding: 24px;
+  background: #f2f6fa;
+}
+.sync-overlay {
+  position: fixed;
+  inset: 0;
+  background: #192e4a70;
+  z-index: 1000;
+  overflow: auto;
+}
+.sync-card {
+  background: white;
+  border: 1px solid #dae4ee;
+  border-radius: 14px;
+  padding: 30px;
+  width: 100%;
+  max-width: 440px;
+  color: #334b66;
+  box-shadow: 0 12px 50px #14253a12;
+}
+.sync-card h1 {
+  font-size: 22px;
+  margin: 16px 0;
+}
+.sync-card h2 {
+  font-size: 17px;
+  margin: 20px 0 12px;
+}
+.sync-card p {
+  font-size: 13px;
+  line-height: 1.8;
+}
+.sync-card small {
+  font-size: 11px;
+  line-height: 1.8;
+  color: #73839a;
+}
+.sync-card button {
+  display: block;
+  margin: 10px 0;
+  width: 100%;
+  padding: 11px;
+  border-radius: 7px;
+  border: 1px solid #cbd9e8;
+  background: #f8fafc;
+  color: #365778;
+  cursor: pointer;
+}
+.sync-card button.primary {
+  background: #296794;
+  color: white;
+  border-color: #296794;
+}
+.sync-card button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.sync-card label {
+  display: block;
+  font-size: 12px;
+  margin: 24px 0 8px;
+}
+.sync-card input {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #cbd9e8;
+  border-radius: 7px;
+  font-size: 16px;
+}
+.sync-icon {
+  color: #427aa5;
+}
+.sync-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  max-width: 390px;
+  font-size: 10px;
+}
+.sync-controls button {
+  cursor: pointer;
+  border: 0;
+  background: #eff4fa;
+  color: #486a8e;
+  padding: 5px 7px;
+  border-radius: 4px;
+}
+.sync-status {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  color: #477a68;
+}
+.sync-status.error,
+.sync-status.conflict,
+.sync-error {
+  color: #b84c4c;
+}
+.sync-controls .sync-error {
+  flex-basis: 100%;
+  font-size: 10px;
+}
+@media (max-width: 600px) {
+  .sync-controls {
+    max-width: 205px;
+    gap: 5px;
+  }
+  .sync-screen {
+    padding: 16px;
+  }
+  .sync-card {
+    padding: 24px;
+  }
+}
