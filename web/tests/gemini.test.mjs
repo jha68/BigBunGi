@@ -231,7 +231,10 @@ test("invalid credentials, quota, unsupported models and blocked responses have 
 test("note generation summarizes all successful conversations, excludes failed turns and redacts credentials", async () => {
   const history = Array.from({ length: 8 }, (_, i) => ({
     question: `question-${i}`,
-    answer: `answer-${i}`,
+    answer:
+      i === 0
+        ? "평균으로 채우세요.\n```python\ndf.fillna(df.mean())\n```"
+        : `answer-${i}`,
   }));
   history.push(
     { question: "pending", answer: "" },
@@ -242,6 +245,10 @@ test("note generation summarizes all successful conversations, excludes failed t
   const data = JSON.parse(payload.contents[0].parts[0].text);
   assert.equal(data.conversations.length, 8);
   assert.equal(data.conversations[0].question, "question-0");
+  assert.ok(data.conversations[0].answer.includes("df.fillna(df.mean())"));
+  assert.ok(
+    payload.systemInstruction.parts[0].text.includes("핵심 Python 코드 1~3줄"),
+  );
   assert.deepEqual(Object.keys(data), ["conversations"]);
   assert.equal(data.context, undefined);
   assert.ok(

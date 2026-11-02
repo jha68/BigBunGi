@@ -26,6 +26,42 @@
   flex-direction: column;
   background: #fcfcff;
 }
+.problem-panel.gemini-expanded > :not(.problem-body) {
+  display: none;
+}
+.gemini-expanded .gemini-panel {
+  position: relative;
+}
+.gemini-expanded
+  .gemini-panel
+  > :not(.gemini-heading):not(.gemini-messages):not(.gemini-composer) {
+  display: none;
+}
+.gemini-expanded .gemini-heading {
+  display: contents;
+}
+.gemini-expanded .gemini-heading > :not(.gemini-expand-toggle) {
+  display: none;
+}
+.gemini-expanded .gemini-heading > .gemini-expand-toggle {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid #c8dce9;
+  border-radius: 6px;
+  background: #fff;
+  color: #47748f;
+  box-shadow: 0 2px 6px #27415a12;
+}
+.gemini-expanded .gemini-messages {
+  padding-top: 48px;
+}
 .gemini-heading {
   display: flex;
   align-items: center;

@@ -139,6 +139,7 @@ function App({ initialState = initial, onStateChange, syncControls }) {
     [progress, setProgress] = useState(initialState.progress || {});
   const [leftTab, setLeftTab] = useState("problem"),
     [bottomTab, setBottomTab] = useState("output");
+  const [aiExpanded, setAiExpanded] = useState(false);
   const [solutions, setSolutions] = useState({}),
     [hintCount, setHintCount] = useState({}),
     [fileIndex, setFileIndex] = useState(0);
@@ -193,6 +194,7 @@ function App({ initialState = initial, onStateChange, syncControls }) {
     setFetchError("");
     setFileIndex(0);
     setLeftTab("problem");
+    setAiExpanded(false);
     jsonFile(`content/problems/${selected}.json`)
       .then((p) => {
         if (live) setProblem(p);
@@ -658,7 +660,9 @@ function App({ initialState = initial, onStateChange, syncControls }) {
         ) : (
           <>
             <section className="workspace">
-              <div className="problem-panel">
+              <div
+                className={`problem-panel ${aiExpanded && leftTab === "ai" ? "gemini-expanded" : ""}`}
+              >
                 <div className="problem-heading">
                   <div className="problem-kicker">
                     <Badge tone={`type${kind}`}>작업형 {kind}유형</Badge>
@@ -751,6 +755,8 @@ function App({ initialState = initial, onStateChange, syncControls }) {
                     code={currentCode}
                     result={result}
                     hidden={leftTab !== "ai"}
+                    expanded={aiExpanded && leftTab === "ai"}
+                    onExpandedChange={setAiExpanded}
                   />
 
                   {leftTab === "problem" && (

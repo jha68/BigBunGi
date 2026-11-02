@@ -56,7 +56,7 @@ async def main():
                         status, body = 429, {"error": {"message": "quota exceeded"}}
                     else:
                         await note_release.wait()
-                        body = {"candidates": [{"content": {"parts": [{"text": "Q. 오류 원인은?\nA. 입력값을 확인하세요."}]}, "finishReason": "STOP"}]}
+                        body = {"candidates": [{"content": {"parts": [{"text": "Q. 오류 원인은?\nA. 출력 예시를 확인하세요.\n\n```python\nprint('Gemini 코드 예시')\n```"}]}, "finishReason": "STOP"}]}
                 elif "할당량 테스트" in question and not quota_once:
                     quota_once = True
                     status, body = 429, {"error": {"message": "quota exceeded"}}
@@ -153,6 +153,31 @@ async def main():
         await page.screenshot(path="/tmp/bigbungi-gemini.png", full_page=True)
         print("PASS: current problem, edited code and actual Python traceback sent; Markdown/code render safely.", flush=True)
 
+        await question_box.fill("확대해도 남아야 하는 질문 초안")
+        normal_height = (await page.locator(".gemini-messages").bounding_box())["height"]
+        generation_count = len([r for r in requests if r["body"]])
+        await page.get_by_role("button", name="AI 대화 확대", exact=True).click()
+        assert await page.get_by_role("button", name="AI 대화 축소", exact=True).get_attribute("aria-expanded") == "true"
+        for selector in [".problem-heading", ".panel-tabs", ".problem-footer", ".gemini-context-bar", ".gemini-status"]:
+            assert not await page.locator(".problem-panel " + selector).is_visible(), selector
+        panel = await page.locator(".problem-panel").bounding_box()
+        messages = await page.locator(".gemini-messages").bounding_box()
+        composer = await page.locator(".gemini-composer").bounding_box()
+        assert abs(messages["y"] - panel["y"] - 1) < 2, (panel, messages)
+        assert abs(composer["y"] + composer["height"] - panel["y"] - panel["height"] + 1) < 2, (panel, composer)
+        assert messages["height"] > normal_height + 100
+        assert await question_box.input_value() == "확대해도 남아야 하는 질문 초안"
+        assert len([r for r in requests if r["body"]]) == generation_count
+        await page.screenshot(path="/tmp/bigbungi-gemini-expanded.png", full_page=True)
+        await question_box.press("Escape")
+        assert await page.locator(".problem-heading").is_visible()
+        assert await question_box.input_value() == "확대해도 남아야 하는 질문 초안"
+        await page.get_by_role("button", name="AI 대화 확대", exact=True).click()
+        await page.get_by_role("button", name="AI 대화 축소", exact=True).click()
+        assert await page.get_by_role("tablist", name="문제 정보", exact=True).is_visible()
+        assert await page.locator(".gemini-turn").count() == 1
+        print("PASS: expanded chat and bottom composer fill the whole problem panel; Escape/collapse preserve draft and conversation.", flush=True)
+
         await edit('print("UPDATED_CODE")')
         await ask("할당량 테스트")
         await page.wait_for_selector(".gemini-turn .gemini-error")
@@ -201,6 +226,7 @@ async def main():
         await page.locator(".question-link").nth(0).click()
         await page.get_by_role("tab", name="노트", exact=True).click()
         await page.wait_for_selector(".note-ai-preview")
+        assert await page.get_by_role("textbox", name="Gemini Python 예시", exact=True).get_attribute("contenteditable") == "false"
         sent_note = [r for r in requests if r["body"]][-1]
         assert sent_note["url"].endswith("models/gemini-2.5-pro:generateContent")
         assert sent_note["key"] == KEY
@@ -211,6 +237,7 @@ async def main():
         await page.get_by_role("button", name="내 노트에 추가", exact=True).click()
         note = await page.get_by_role("textbox", name="풀이 노트", exact=True).input_value()
         assert note.startswith("생성 중 수정한 메모\n\nQ. 오류 원인은?")
+        assert "```python\nprint('Gemini 코드 예시')\n```" in note
         assert not await page.locator(".note-ai-preview").count()
         await page.locator(".question-link").nth(1).click()
         await page.get_by_role("tab", name="노트", exact=True).click()
@@ -231,6 +258,11 @@ async def main():
         await page.get_by_role("textbox", name="Gemini에게 질문", exact=True).scroll_into_view_if_needed()
         assert await page.get_by_role("textbox", name="Gemini에게 질문", exact=True).is_visible()
         await ask("모바일 질문 테스트")
+        await page.get_by_role("button", name="AI 대화 확대", exact=True).click()
+        assert await page.locator(".problem-panel.gemini-expanded .gemini-composer").is_visible()
+        assert await page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+        await page.screenshot(path="/tmp/bigbungi-gemini-expanded-mobile.png", full_page=True)
+        await page.get_by_role("button", name="AI 대화 축소", exact=True).click()
         await page.screenshot(path="/tmp/bigbungi-gemini-mobile.png", full_page=True)
 
         stored = await page.evaluate("JSON.stringify({...localStorage}) + JSON.stringify({...sessionStorage})")

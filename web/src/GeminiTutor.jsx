@@ -17,6 +17,8 @@ import {
   ExternalLink,
   KeyRound,
   Loader2,
+  Maximize2,
+  Minimize2,
   RotateCcw,
   Send,
   Settings2,
@@ -462,8 +464,8 @@ export function GeminiNoteGenerator({
         </button>
       </div>
       <p>
-        이 문제의 질문·답변 {count}개를 질문 한 줄·답변 한 문장으로 짧게
-        저장합니다.
+        이 문제의 질문·답변 {count}개를 질문 한 줄·답변 한 문장과 핵심 코드
+        1~3줄로 짧게 저장합니다.
       </p>
       {ready ? (
         <small>
@@ -522,7 +524,14 @@ export function GeminiNoteGenerator({
   );
 }
 
-export function GeminiTutor({ problem, code, result, hidden }) {
+export function GeminiTutor({
+  problem,
+  code,
+  result,
+  hidden,
+  expanded = false,
+  onExpandedChange,
+}) {
   const tutor = useContext(TutorContext);
   const [settingsOpen, setSettingsOpen] = useState(false),
     [contextOpen, setContextOpen] = useState(false);
@@ -542,6 +551,21 @@ export function GeminiTutor({ problem, code, result, hidden }) {
     if (!hidden && messages.current)
       messages.current.scrollTop = messages.current.scrollHeight;
   }, [currentTurns, hidden]);
+  useEffect(() => {
+    if (!expanded || hidden) return;
+    const collapse = (event) => {
+      if (
+        event.key === "Escape" &&
+        !event.isComposing &&
+        !event.defaultPrevented
+      ) {
+        event.preventDefault();
+        onExpandedChange?.(false);
+      }
+    };
+    document.addEventListener("keydown", collapse);
+    return () => document.removeEventListener("keydown", collapse);
+  }, [expanded, hidden, onExpandedChange]);
   if (hidden) return null;
   async function submit(question = draft, retryId) {
     setFormError("");
@@ -591,6 +615,16 @@ export function GeminiTutor({ problem, code, result, hidden }) {
         <span className={`gemini-status ${ready ? "ready" : ""}`}>
           {ready ? "연결됨" : "키 연결 필요"}
         </span>
+        <button
+          className="gemini-expand-toggle"
+          aria-label={expanded ? "AI 대화 축소" : "AI 대화 확대"}
+          title={expanded ? "대화 축소 (Esc)" : "문제 패널 전체로 대화 확대"}
+          aria-expanded={expanded}
+          aria-controls={`gemini-messages-${problem.id}`}
+          onClick={() => onExpandedChange?.(!expanded)}
+        >
+          {expanded ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+        </button>
         <button
           aria-label="Gemini 연결 설정"
           title="연결 설정"
@@ -787,6 +821,7 @@ export function GeminiTutor({ problem, code, result, hidden }) {
       )}
       <div
         className="gemini-messages"
+        id={`gemini-messages-${problem.id}`}
         ref={messages}
         role="log"
         aria-label="이 문제의 AI 대화"
