@@ -11,6 +11,67 @@ const unhex = (str) =>
 const digest = async (text) =>
   hex(await crypto.subtle.digest("SHA-256", encoder.encode(text)));
 
+async function settingsKey(passwordHash) {
+  const material = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(passwordHash),
+    "HKDF",
+    false,
+    ["deriveKey"],
+  );
+  return crypto.subtle.deriveKey(
+    {
+      name: "HKDF",
+      hash: "SHA-256",
+      salt: encoder.encode("bigbungi-vault-v1"),
+      info: encoder.encode("gemini-settings/owner"),
+    },
+    material,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"],
+  );
+}
+const aad = encoder.encode("bigbungi/settings/owner/v1");
+export async function encryptSettings(settings, passwordHash) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encrypted = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv, additionalData: aad },
+    await settingsKey(passwordHash),
+    encoder.encode(JSON.stringify(settings)),
+  );
+  return JSON.stringify({ version: 1, iv: hex(iv), data: hex(encrypted) });
+}
+export async function decryptSettings(data, passwordHash) {
+  const record = JSON.parse(data);
+  if (
+    record.version !== 1 ||
+    !/^[a-f0-9]{24}$/.test(record.iv) ||
+    !/^[a-f0-9]+$/.test(record.data) ||
+    record.data.length % 2
+  )
+    throw new Error("invalid-vault");
+  const decrypted = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: unhex(record.iv), additionalData: aad },
+    await settingsKey(passwordHash),
+    unhex(record.data),
+  );
+  return JSON.parse(new TextDecoder().decode(decrypted));
+}
+function validSettings(settings) {
+  return (
+    settings === null ||
+    (settings &&
+      typeof settings === "object" &&
+      !Array.isArray(settings) &&
+      Object.keys(settings).every((key) => ["apiKey", "model"].includes(key)) &&
+      typeof settings.apiKey === "string" &&
+      /^[\x21-\x7e]{1,512}$/.test(settings.apiKey) &&
+      typeof settings.model === "string" &&
+      /^models\/gemini-[a-zA-Z0-9._-]{1,180}$/.test(settings.model))
+  );
+}
+
 async function validPassword(password, record) {
   if (typeof password !== "string" || password.length > 128) return false;
   const [version, salt, expected] = record.split(":");
@@ -202,6 +263,48 @@ export default {
         return reply({ ok: true }, 200, {
           "Set-Cookie": `${COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`,
         });
+      }
+      if (path === "/settings" && request.method === "GET") {
+        const row = await env.DB.prepare(
+          "SELECT revision, data FROM gemini_settings WHERE id = 'owner'",
+        ).first();
+        let settings = null,
+          unreadable = false;
+        if (row?.data) {
+          try {
+            settings = await decryptSettings(row.data, env.PASSWORD_HASH);
+          } catch {
+            unreadable = true;
+          }
+        }
+        return reply({ revision: row?.revision || 0, settings, unreadable });
+      }
+      if (path === "/settings" && request.method === "PUT") {
+        const { revision, settings } = await readBody(request, 4096);
+        if (
+          !Number.isSafeInteger(revision) ||
+          revision < 0 ||
+          !validSettings(settings)
+        )
+          return reply(
+            { error: "저장할 Gemini 설정의 형식이 올바르지 않습니다." },
+            400,
+          );
+        const encrypted =
+          settings === null
+            ? null
+            : await encryptSettings(settings, env.PASSWORD_HASH);
+        const changed = await env.DB.prepare(
+          "UPDATE gemini_settings SET data = ?, revision = revision + 1, updated_at = ? WHERE id = 'owner' AND revision = ?",
+        )
+          .bind(encrypted, new Date().toISOString(), revision)
+          .run();
+        if (changed.meta.changes !== 1)
+          return reply(
+            { error: "다른 기기에서 Gemini 설정이 변경되었습니다." },
+            409,
+          );
+        return reply({ revision: revision + 1 });
       }
       if (path === "/state" && request.method === "GET") {
         const row = await env.DB.prepare(

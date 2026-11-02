@@ -5,12 +5,15 @@ dist at :4195, and run `node sync/test-server.mjs` before this script.
 """
 import asyncio
 import json
+import os
 import urllib.request
 from playwright.async_api import async_playwright
 
 ORIGIN = "https://bigbungi.junununseo.com"
 API = "https://bigbungi-api.junununseo.com"
 PASSWORD = "test-only-sync-password"
+GEMINI_KEY = "test-only-persisted-gemini-key"
+GEMINI_MODEL = "models/gemini-2.5-flash"
 STORAGE = "bigbungi.practice.v1"
 
 def local_fetch(url, method, body, headers):
@@ -32,12 +35,19 @@ async def main():
                 await ctx.add_init_script(f"if (!localStorage.getItem('{STORAGE}')) localStorage.setItem('{STORAGE}', {json.dumps(json.dumps(seed))});")
             async def proxy(route):
                 url = route.request.url
+                if url.startswith("https://generativelanguage.googleapis.com/"):
+                    headers = {"access-control-allow-origin": ORIGIN, "access-control-allow-headers":"content-type,x-goog-api-key", "access-control-allow-methods":"GET,POST,OPTIONS"}
+                    if route.request.method == "OPTIONS":
+                        await route.fulfill(status=204,headers=headers); return
+                    assert route.request.headers.get("x-goog-api-key") == GEMINI_KEY
+                    body = {"models":[{"name":"models/gemini-2.5-flash-lite","displayName":"Flash Lite","supportedGenerationMethods":["generateContent"]},{"name":GEMINI_MODEL,"displayName":"Gemini 2.5 Flash","supportedGenerationMethods":["generateContent"]}]}
+                    await route.fulfill(status=200,content_type="application/json",body=json.dumps(body),headers=headers); return
                 if url.startswith(API):
                     if offline and route.request.method == "PUT":
                         await route.abort(); return
-                    target = "http://127.0.0.1:4301" + url[len(API):]
+                    target = "http://127.0.0.1:" + os.environ.get("SYNC_TEST_PORT", "4301") + url[len(API):]
                 elif url.startswith(ORIGIN):
-                    target = "http://127.0.0.1:4195" + url[len(ORIGIN):]
+                    target = os.environ.get("SYNC_TEST_WEB", "http://127.0.0.1:4195") + url[len(ORIGIN):]
                 else:
                     await route.abort(); return
                 status, headers, body = await asyncio.to_thread(local_fetch, target, route.request.method, route.request.post_data_buffer,
@@ -64,7 +74,27 @@ async def main():
         await saved(page)
         await edit(page, 'print("DEVICE_ONE")'); await saved(page)
 
+        await page.get_by_role("tab", name="AI 질문", exact=True).click()
+        await page.locator("#gemini-key").fill(GEMINI_KEY)
+        await page.get_by_role("button", name="키 연결", exact=True).click()
+        await page.wait_for_selector(".gemini-status.ready")
+        await page.get_by_role("button", name="Gemini 연결 설정", exact=True).click()
+        await page.locator("#gemini-model").select_option(GEMINI_MODEL)
+        await page.wait_for_function("document.querySelector('.gemini-persistence').textContent.includes('계정에 저장됨')")
+        await page.reload()
+        await saved(page)
+        await page.get_by_role("tab", name="AI 질문", exact=True).click()
+        await page.wait_for_selector(".gemini-status.ready")
+        await page.get_by_role("button", name="Gemini 연결 설정", exact=True).click()
+        assert await page.locator("#gemini-model").input_value() == GEMINI_MODEL
+        assert await page.locator("#gemini-key").input_value() == GEMINI_KEY
+        assert GEMINI_KEY not in await page.evaluate("JSON.stringify({...localStorage}) + JSON.stringify({...sessionStorage})")
+        print("PASS: encrypted Gemini key and selected model automatically restore after refresh without browser storage.", flush=True)
+
         b = await context(); other = await b.new_page(); await other.goto(ORIGIN); await login(other)
+        await other.get_by_role("tab", name="AI 질문", exact=True).click()
+        await other.wait_for_selector(".gemini-status.ready")
+        assert "Gemini 2.5 Flash" in await other.locator(".gemini-selected-model").inner_text()
         await saved(other)
         assert "DEVICE_ONE" in await other.get_by_role("textbox", name="Python 코드 편집기", exact=True).inner_text()
         assert await other.locator(".question-link .solved-icon").count() == 1
@@ -106,6 +136,20 @@ async def main():
         assert PASSWORD not in await page.evaluate("JSON.stringify({...localStorage}) + JSON.stringify({...sessionStorage})")
         assert not any(cookie["name"] == "__Host-bigbungi-session" for cookie in await a.cookies())
         await page.screenshot(path="/tmp/bigbungi-sync-login.png")
+        await login(page)
+        await saved(page)
+        await page.get_by_role("tab", name="AI 질문", exact=True).click()
+        await page.wait_for_selector(".gemini-status.ready")
+        await page.get_by_role("button", name="Gemini 연결 설정", exact=True).click()
+        assert await page.locator("#gemini-model").input_value() == GEMINI_MODEL
+        await page.get_by_role("button", name="저장된 키·모델 삭제", exact=True).click()
+        await page.wait_for_function("document.querySelector('.gemini-persistence').textContent.includes('키를 연결하면')")
+        await page.reload()
+        await saved(page)
+        await page.get_by_role("tab", name="AI 질문", exact=True).click()
+        assert await page.locator("#gemini-key").input_value() == ""
+        assert await page.get_by_role("button", name="Gemini 질문 보내기").is_disabled()
+        print("PASS: key/model survive logout and another device; explicit deletion persists after refresh.", flush=True)
         print("PASS: mobile layout, logout removes session and app access, password never stored in browser storage.", flush=True)
         await browser.close()
 

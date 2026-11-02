@@ -50,13 +50,13 @@ async def main():
             else:
                 payload = req.post_data_json
                 question = payload["contents"][-1]["parts"][-1]["text"]
-                if "지금은 대화 답변이 아니라 학습자의 복습 노트" in json.dumps(payload, ensure_ascii=False):
+                if "입력된 질문과 AI 답변만 아주 짧게 요약" in json.dumps(payload, ensure_ascii=False):
                     note_attempts += 1
                     if note_attempts == 1:
                         status, body = 429, {"error": {"message": "quota exceeded"}}
                     else:
                         await note_release.wait()
-                        body = {"candidates": [{"content": {"parts": [{"text": "## AI 복습 정리\n표준편차 ddof와 오류 원인을 복습하세요.\n\n```python\nprint('review')\n```"}]}, "finishReason": "STOP"}]}
+                        body = {"candidates": [{"content": {"parts": [{"text": "Q. 오류 원인은?\nA. 입력값을 확인하세요."}]}, "finishReason": "STOP"}]}
                 elif "할당량 테스트" in question and not quota_once:
                     quota_once = True
                     status, body = 429, {"error": {"message": "quota exceeded"}}
@@ -66,7 +66,8 @@ async def main():
                     text = "현재 문제를 참고한 답변입니다.\n\n```python\nprint('Gemini 코드 예시')\n```\n\n<script>window.__gemini_xss = true</script>\n[unsafe](javascript:alert(1))"
                     body = {"candidates": [{"content": {"parts": [{"text": text}]}, "finishReason": "STOP"}]}
             try:
-                await route.fulfill(status=status, content_type="application/json", body=json.dumps(body), headers=headers)
+                streamed = status == 200 and "streamGenerateContent" in req.url
+                await route.fulfill(status=status, content_type="text/event-stream" if streamed else "application/json", body=("data: " + json.dumps(body) + "\n\n") if streamed else json.dumps(body), headers=headers)
             except PlaywrightError:
                 if not release.is_set(): raise
 
@@ -122,9 +123,20 @@ async def main():
             await page.get_by_role("button", name="Gemini 질문 보내기").click()
             await page.wait_for_function("!document.querySelector('[aria-label=\"Gemini 응답 중지\"]')")
 
-        await ask("내 코드의 오류 원인을 알려줘")
+        question_box = page.get_by_role("textbox", name="Gemini에게 질문", exact=True)
+        await question_box.fill("한글 입력 중")
+        before = len([r for r in requests if r["body"]])
+        await question_box.evaluate("e => e.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter',code:'Enter',keyCode:229,isComposing:true,bubbles:true,cancelable:true}))")
+        await question_box.press("Shift+Enter")
+        assert len([r for r in requests if r["body"]]) == before
+        assert "\n" in await question_box.input_value()
+        await question_box.fill("내 코드의 오류 원인을 알려줘")
+        await question_box.press("Enter")
+        await page.wait_for_function("!document.querySelector('[aria-label=\"Gemini 응답 중지\"]')")
         await page.wait_for_selector(".gemini-answer .gemini-markdown")
         sent = [r for r in requests if r["body"]][-1]
+        assert "streamGenerateContent?alt=sse" in sent["url"]
+        assert await page.locator(".gemini-question").first.evaluate("e=>getComputedStyle(e).backgroundColor") == "rgb(223, 242, 255)"
         payload = sent["body"]
         raw = payload["contents"][-1]["parts"][0]["text"]
         snapshot = json.loads(raw[raw.index("{"):])
@@ -194,11 +206,11 @@ async def main():
         assert sent_note["key"] == KEY
         note_data = json.loads(sent_note["body"]["contents"][0]["parts"][0]["text"])
         assert len(note_data["conversations"]) == 2
-        assert note_data["context"]["problem"]["id"] == "t1-01"
+        assert list(note_data) == ["conversations"]
         assert "두 번째 문제 힌트" not in json.dumps(note_data,ensure_ascii=False)
         await page.get_by_role("button", name="내 노트에 추가", exact=True).click()
         note = await page.get_by_role("textbox", name="풀이 노트", exact=True).input_value()
-        assert note.startswith("생성 중 수정한 메모\n\n## AI 복습 정리")
+        assert note.startswith("생성 중 수정한 메모\n\nQ. 오류 원인은?")
         assert not await page.locator(".note-ai-preview").count()
         await page.locator(".question-link").nth(1).click()
         await page.get_by_role("tab", name="노트", exact=True).click()

@@ -9,7 +9,7 @@ const mf = new Miniflare({
   scriptPath: new URL("./worker.js", import.meta.url).pathname,
   compatibilityDate: "2026-07-01",
   host: "127.0.0.1",
-  port: 4301,
+  port: Number(process.env.SYNC_TEST_PORT || 4301),
   cf: false,
   d1Databases: ["DB"],
   bindings: {

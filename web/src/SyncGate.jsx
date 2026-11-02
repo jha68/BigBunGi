@@ -253,6 +253,7 @@ export default function SyncGate({
     return (
       <>
         {children(restored, changed, {
+          settingsApi: api,
           status,
           error,
           retry: () => {

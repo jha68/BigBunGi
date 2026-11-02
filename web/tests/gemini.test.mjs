@@ -242,7 +242,14 @@ test("note generation summarizes all successful conversations, excludes failed t
   const data = JSON.parse(payload.contents[0].parts[0].text);
   assert.equal(data.conversations.length, 8);
   assert.equal(data.conversations[0].question, "question-0");
-  assert.equal(data.context.problem.id, "t1-01");
+  assert.deepEqual(Object.keys(data), ["conversations"]);
+  assert.equal(data.context, undefined);
+  assert.ok(
+    payload.systemInstruction.parts[0].text.includes("Q. 질문 요지 한 줄"),
+  );
+  assert.ok(
+    !payload.systemInstruction.parts[0].text.includes("당신은 빅데이터"),
+  );
   assert.ok(!JSON.stringify(payload).includes(key));
   assert.ok(!JSON.stringify(payload).includes("DO_NOT_SEND"));
   assert.throws(() => makeNoteRequest({ context, history: [] }), /질문·답변/);

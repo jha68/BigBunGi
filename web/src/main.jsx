@@ -1442,7 +1442,7 @@ function App({ initialState = initial, onStateChange, syncControls }) {
 createRoot(document.getElementById("root")).render(
   <SyncGate initialState={initial}>
     {(restored, onStateChange, syncControls) => (
-      <GeminiProvider>
+      <GeminiProvider settingsApi={syncControls?.settingsApi}>
         <App
           initialState={restored}
           onStateChange={onStateChange}

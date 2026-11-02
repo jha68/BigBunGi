@@ -138,6 +138,97 @@ test("cross-site writes, malformed state, leaked API keys and oversized bodies a
   );
   assert.equal((await (await call("/state")).json()).revision, 2);
 });
+test("Gemini settings are encrypted at rest, private, revision protected and isolated from study backups", async () => {
+  const settings = {
+    apiKey: "test-only-gemini-key",
+    model: "models/gemini-2.5-flash-lite",
+  };
+  assert.equal((await call("/settings", "GET", undefined, null)).status, 401);
+  assert.deepEqual(await (await call("/settings")).json(), {
+    revision: 0,
+    settings: null,
+    unreadable: false,
+  });
+  assert.equal(
+    (await call("/settings", "PUT", { revision: 0, settings })).status,
+    200,
+  );
+  const row = await db
+    .prepare("SELECT data FROM gemini_settings WHERE id = 'owner'")
+    .first();
+  assert.ok(!row.data.includes(settings.apiKey));
+  assert.ok(!row.data.includes(settings.model));
+  const login = await call("/login", "POST", { password }, null);
+  const other = login.headers.get("set-cookie").split(";")[0];
+  const restored = await call("/settings", "GET", undefined, other);
+  assert.equal(restored.headers.get("cache-control"), "no-store");
+  assert.deepEqual((await restored.json()).settings, settings);
+  assert.ok(
+    !JSON.stringify(await (await call("/state")).json()).includes(
+      settings.apiKey,
+    ),
+  );
+  assert.equal(
+    (await call("/settings", "PUT", { revision: 0, settings })).status,
+    409,
+  );
+  assert.equal(
+    (
+      await call("/settings", "PUT", { revision: 1, settings }, cookie, {
+        Origin: "https://evil.example",
+      })
+    ).status,
+    403,
+  );
+  assert.equal(
+    (
+      await call("/settings", "PUT", {
+        revision: 1,
+        settings: { ...settings, password: "do-not-store" },
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await call("/settings", "PUT", {
+        revision: 1,
+        settings: { ...settings, apiKey: "bad\nkey" },
+      })
+    ).status,
+    400,
+  );
+  const corrupted = JSON.parse(row.data);
+  corrupted.data =
+    (corrupted.data[0] === "a" ? "b" : "a") + corrupted.data.slice(1);
+  await db
+    .prepare("UPDATE gemini_settings SET data = ? WHERE id = 'owner'")
+    .bind(JSON.stringify(corrupted))
+    .run();
+  assert.deepEqual(await (await call("/settings")).json(), {
+    revision: 1,
+    settings: null,
+    unreadable: true,
+  });
+  assert.equal(
+    (await call("/settings", "PUT", { revision: 1, settings })).status,
+    200,
+  );
+  const updated = await db
+    .prepare("SELECT data FROM gemini_settings WHERE id = 'owner'")
+    .first();
+  assert.notEqual(updated.data, row.data);
+  assert.equal(
+    (await call("/settings", "PUT", { revision: 2, settings: null })).status,
+    200,
+  );
+  assert.deepEqual(await (await call("/settings")).json(), {
+    revision: 3,
+    settings: null,
+    unreadable: false,
+  });
+});
+
 test("logout invalidates sessions, expired sessions are rejected, and wrong passwords are rate limited", async () => {
   assert.equal((await call("/logout", "POST", {})).status, 200);
   assert.equal((await call("/session")).status, 401);

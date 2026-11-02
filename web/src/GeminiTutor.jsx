@@ -3,6 +3,7 @@ import React, {
   memo,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -33,17 +34,13 @@ import {
   affordableModels,
   freeTierLabel,
 } from "./model-pricing.js";
-import {
-  askGemini,
-  listModels,
-  makeContext,
-  preferredModel,
-} from "./gemini.js";
+import { askGemini, listModels, makeContext } from "./gemini.js";
 import "./gemini.css";
+import { createSettingsStore } from "./gemini-settings.js";
 
 const TutorContext = createContext(null);
 
-export function GeminiProvider({ children }) {
+export function GeminiProvider({ children, settingsApi }) {
   const [access, setAccess] = useState(null);
   const accessPromise = useRef(null);
   useEffect(() => {
@@ -58,7 +55,18 @@ export function GeminiProvider({ children }) {
       })
       .catch(() => null);
   }, []);
-  // Credentials and conversation stay in memory, outside the app's saved state.
+  // Plaintext credentials and conversations stay out of browser storage/backups.
+  const [persistence, setPersistence] = useState({
+    state: settingsApi ? "loading" : "session",
+    error: "",
+  });
+  const store = useMemo(
+    () =>
+      settingsApi ? createSettingsStore(settingsApi, setPersistence) : null,
+    [settingsApi],
+  );
+  const preferred = useRef(""),
+    providerLive = useRef(true);
   const [keyDraft, setKeyDraft] = useState("");
   const [connection, setConnection] = useState({ status: "idle", error: "" });
   const [models, setModels] = useState([]),
@@ -71,13 +79,55 @@ export function GeminiProvider({ children }) {
     request = useRef(null),
     connecting = useRef(null);
 
-  useEffect(
-    () => () => {
+  async function restoreSettings() {
+    if (!store) return;
+    try {
+      const saved = await store.load();
+      if (providerLive.current && saved.settings) {
+        preferred.current = saved.settings.model;
+        setKeyDraft(saved.settings.apiKey);
+        await connect({
+          key: saved.settings.apiKey,
+          rememberedModel: saved.settings.model,
+          persist: false,
+        });
+      }
+    } catch {
+      /* The persistence status exposes a retry without erasing saved data. */
+    }
+  }
+  useEffect(() => {
+    if (!store) return;
+    let live = true;
+    store.start();
+    store
+      .load()
+      .then((saved) => {
+        if (!live || !saved.settings) return;
+        preferred.current = saved.settings.model;
+        setKeyDraft(saved.settings.apiKey);
+        connect({
+          key: saved.settings.apiKey,
+          rememberedModel: saved.settings.model,
+          persist: false,
+        });
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+      store.stop();
+    };
+  }, [store]);
+
+  useEffect(() => {
+    providerLive.current = true;
+    return () => {
+      providerLive.current = false;
       request.current?.abort();
       connecting.current?.abort();
-    },
-    [],
-  );
+      connecting.current = null;
+    };
+  }, []);
   function updateKey(value) {
     activeKey.current = "";
     setKeyDraft(value);
@@ -85,9 +135,9 @@ export function GeminiProvider({ children }) {
     setModel("");
     setConnection({ status: "idle", error: "" });
   }
-  async function connect() {
+  async function connect(options = {}) {
     if (request.current || connecting.current) return;
-    const key = keyDraft.trim(),
+    const key = (options.key ?? keyDraft).trim(),
       controller = new AbortController();
     connecting.current = controller;
     const timer = setTimeout(() => controller.abort(), 20000);
@@ -105,8 +155,21 @@ export function GeminiProvider({ children }) {
       if (connecting.current !== controller) return;
       activeKey.current = key;
       setModels(available);
-      setModel(available[0].name);
+      const remembered = options.rememberedModel || preferred.current;
+      const chosen =
+        available.find((item) => item.name === remembered)?.name ||
+        available[0].name;
+      setModel(chosen);
+      preferred.current = chosen;
       setConnection({ status: "ready", error: "" });
+      if (options.persist !== false)
+        store?.save({ apiKey: key, model: chosen });
+      if (remembered && chosen !== remembered)
+        setPersistence((current) => ({
+          ...current,
+          error:
+            "저장한 모델을 현재 사용할 수 없어 가장 저렴한 사용 가능 모델을 선택했습니다.",
+        }));
     } catch (error) {
       if (connecting.current !== controller) return;
       activeKey.current = "";
@@ -129,8 +192,16 @@ export function GeminiProvider({ children }) {
     activeKey.current = "";
     setKeyDraft("");
     setModel("");
+    preferred.current = "";
     setModels([]);
     setConnection({ status: "idle", error: "" });
+    store?.save(null);
+  }
+  function chooseModel(value) {
+    setModel(value);
+    preferred.current = value;
+    if (activeKey.current)
+      store?.save({ apiKey: activeKey.current, model: value });
   }
   function updateTurn(pid, id, change) {
     setTurns((previous) => ({
@@ -200,6 +271,7 @@ export function GeminiProvider({ children }) {
         question,
         history,
         signal: controller.signal,
+        onText: (text) => updateTurn(pid, id, { answer: text }),
       });
       updateTurn(pid, id, {
         answer: response.text,
@@ -246,7 +318,6 @@ export function GeminiProvider({ children }) {
         apiKey: activeKey.current,
         model,
         task: "notes",
-        context: makeContext(problem, code, result),
         history: turns[pid] || [],
         signal: controller.signal,
       });
@@ -285,9 +356,13 @@ export function GeminiProvider({ children }) {
         connection,
         models,
         model,
-        setModel,
-        connect,
+        setModel: chooseModel,
+        connect: () => connect(),
         disconnect,
+        settingsEnabled: !!store,
+        persistence,
+        retrySettings: () =>
+          store?.hasIntent ? store.retry() : restoreSettings(),
         turns,
         drafts,
         setDrafts,
@@ -387,8 +462,8 @@ export function GeminiNoteGenerator({
         </button>
       </div>
       <p>
-        이 문제의 질문·답변 {count}개를 핵심 개념과 실수, 복습 체크리스트로
-        정리합니다.
+        이 문제의 질문·답변 {count}개를 질문 한 줄·답변 한 문장으로 짧게
+        저장합니다.
       </p>
       {ready ? (
         <small>
@@ -459,7 +534,9 @@ export function GeminiTutor({ problem, code, result, hidden }) {
     draft = tutor.drafts[problem.id] || "";
   const ready = tutor.connection.status === "ready",
     showSettings = settingsOpen || !ready;
-  const checking = tutor.connection.status === "checking",
+  const checking =
+      tutor.connection.status === "checking" ||
+      tutor.persistence.state === "loading",
     busy = !!tutor.pending;
   useEffect(() => {
     if (!hidden && messages.current)
@@ -588,7 +665,7 @@ export function GeminiTutor({ problem, code, result, hidden }) {
                   ))}
                 </select>
                 <button onClick={tutor.disconnect} disabled={busy}>
-                  연결 해제
+                  {tutor.settingsEnabled ? "저장된 키·모델 삭제" : "연결 해제"}
                 </button>
               </div>
               <div className="gemini-price-info">
@@ -636,7 +713,9 @@ export function GeminiTutor({ problem, code, result, hidden }) {
           )}
           <p>
             <ShieldCheck size={12} />
-            키·AI 대화는 이 탭에서만 유지하며 새로고침하면 지워집니다.
+            {tutor.settingsEnabled
+              ? "키·모델은 로그인 계정에 암호화해 저장하고 자동 복원합니다. AI 대화는 새로고침하면 지워집니다."
+              : "키·AI 대화는 이 탭에서만 유지하며 새로고침하면 지워집니다."}
             <br />
             입력한 키의 할당량·요금 정책이 적용됩니다.
           </p>
@@ -653,6 +732,29 @@ export function GeminiTutor({ problem, code, result, hidden }) {
             >
               설정 접기
               <ChevronUp size={12} />
+            </button>
+          )}
+        </div>
+      )}
+      {tutor.settingsEnabled && (
+        <div className="gemini-persistence" role="status">
+          <span>
+            {
+              {
+                loading: "저장된 Gemini 설정 확인 중…",
+                saving: "키·모델 암호화 저장 중…",
+                saved: "키·모델이 계정에 저장됨",
+                empty: "키를 연결하면 선택 모델과 함께 자동 저장됩니다.",
+                error: "Gemini 설정 저장·복원 확인 필요",
+              }[tutor.persistence.state]
+            }
+          </span>
+          {tutor.persistence.error && (
+            <span className="gemini-form-error">{tutor.persistence.error}</span>
+          )}
+          {tutor.persistence.state === "error" && (
+            <button onClick={tutor.retrySettings} disabled={busy || checking}>
+              설정 저장·복원 재시도
             </button>
           )}
         </div>
@@ -800,7 +902,12 @@ export function GeminiTutor({ problem, code, result, hidden }) {
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
-              if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+              if (
+                event.key === "Enter" &&
+                !event.shiftKey &&
+                !event.nativeEvent.isComposing &&
+                event.nativeEvent.keyCode !== 229
+              ) {
                 event.preventDefault();
                 if (ready && !busy) submit();
               }
@@ -827,7 +934,7 @@ export function GeminiTutor({ problem, code, result, hidden }) {
         </div>
         <div className="gemini-composer-note">
           <span>질문·첨부 내용은 Google Gemini로 전송됩니다.</span>
-          <span>Ctrl / ⌘ ↵ 전송</span>
+          <span>Enter 전송 · Shift+Enter 줄바꿈</span>
         </div>
       </form>
     </section>
