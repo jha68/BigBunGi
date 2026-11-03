@@ -168,7 +168,7 @@ test("generation sends exact latest context and conversational roles to the sele
   );
 });
 
-test("invalid credentials, quota, unsupported models and blocked responses have actionable errors", async () => {
+test("API failures preserve original errors and blocked responses, with credentials redacted", async () => {
   const params = {
     apiKey: key,
     model: "models/gemini-flash-latest",
@@ -187,7 +187,8 @@ test("invalid credentials, quota, unsupported models and blocked responses have 
       ),
     (error) =>
       error.status === 429 &&
-      error.message.includes("사용 한도") &&
+      error.message.includes("HTTP 429") &&
+      error.message.includes("quota exceeded [API_KEY_REDACTED]") &&
       !error.message.includes(key),
   );
   await assert.rejects(
@@ -201,7 +202,7 @@ test("invalid credentials, quota, unsupported models and blocked responses have 
             { status: 403 },
           ),
       ),
-    /프로젝트 권한/,
+    /not authorized/,
   );
   await assert.rejects(() => askGemini({ ...params, model: "../bad" }), /모델/);
   await assert.rejects(
@@ -209,11 +210,11 @@ test("invalid credentials, quota, unsupported models and blocked responses have 
       askGemini(params, async () =>
         ok({ promptFeedback: { blockReason: "SAFETY" } }),
       ),
-    /응답이 제한/,
+    /SAFETY/,
   );
   await assert.rejects(
     () => askGemini(params, async () => ok({ candidates: [] })),
-    /텍스트 답변/,
+    /"candidates": \[\]/,
   );
   const limited = await askGemini(params, async () =>
     ok({
@@ -226,6 +227,65 @@ test("invalid credentials, quota, unsupported models and blocked responses have 
     }),
   );
   assert.equal(limited.truncated, true);
+});
+
+test("HTTP errors retain the full response, quota details and non-JSON bodies without translation or truncation", async () => {
+  const params = {
+    apiKey: key,
+    model: "models/gemini-test",
+    context: makeContext(problem, ""),
+    question: "help",
+  };
+  const payload = {
+    error: {
+      code: 429,
+      status: "RESOURCE_EXHAUSTED",
+      message: "quota " + "x".repeat(2500) + key,
+      details: [
+        {
+          "@type": "type.googleapis.com/google.rpc.RetryInfo",
+          retryDelay: "32s",
+        },
+        {
+          "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+          violations: [
+            { quotaId: "GenerateRequestsPerDayPerProjectPerModel-FreeTier" },
+          ],
+        },
+      ],
+    },
+  };
+  const raw = JSON.stringify(payload, null, 2);
+  await assert.rejects(
+    () =>
+      askGemini(
+        params,
+        async () =>
+          new Response(raw, { status: 429, statusText: "Too Many Requests" }),
+      ),
+    (error) =>
+      error.status === 429 &&
+      error.message ===
+        "HTTP 429 Too Many Requests\n" +
+          raw.replaceAll(key, "[API_KEY_REDACTED]"),
+  );
+  const html =
+    "<html>upstream unavailable\n<script>alert(1)</script> " + key + "</html>";
+  await assert.rejects(
+    () => askGemini(params, async () => new Response(html, { status: 503 })),
+    (error) =>
+      error.message ===
+      "HTTP 503\n" + html.replaceAll(key, "[API_KEY_REDACTED]"),
+  );
+  await assert.rejects(
+    () =>
+      askGemini(
+        params,
+        async () =>
+          new Response(null, { status: 502, statusText: "Bad Gateway" }),
+      ),
+    (error) => error.message === "HTTP 502 Bad Gateway",
+  );
 });
 
 test("note generation summarizes all successful conversations, excludes failed turns and redacts credentials", async () => {

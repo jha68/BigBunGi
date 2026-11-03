@@ -327,7 +327,7 @@ export function GeminiProvider({
             ? "응답 시간이 초과됐습니다. 잠시 후 다시 시도해 주세요."
             : "응답 생성을 중지했습니다."
           : error instanceof TypeError
-            ? "네트워크 연결을 확인해 주세요. Gemini에 요청을 보내지 못했습니다."
+            ? `${error.name}: ${error.message}`
             : error.message;
       updateTurn(pid, id, { error: message, status: "error" });
     } finally {
@@ -379,7 +379,7 @@ export function GeminiProvider({
               ? "노트 생성 시간이 초과됐습니다. 다시 시도해 주세요."
               : "노트 생성을 중지했습니다."
             : error instanceof TypeError
-              ? "네트워크 연결을 확인해 주세요."
+              ? `${error.name}: ${error.message}`
               : error.message,
       });
     } finally {
@@ -491,7 +491,7 @@ export function GeminiNoteGenerator({
         </button>
       )}
       {generation?.error && (
-        <p className="gemini-form-error" role="alert">
+        <p className="gemini-form-error gemini-api-error" role="alert">
           {generation.error}
         </p>
       )}

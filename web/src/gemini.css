@@ -519,6 +519,9 @@
   flex: 1;
   min-width: 0;
   overflow-wrap: anywhere;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  max-height: 360px;
+  overflow-y: auto;
 }
 .gemini-error button {
   color: #b39292;
@@ -613,6 +616,13 @@
 }
 .gemini-form-error {
   color: #bb8b82;
+}
+.gemini-api-error {
+  font-family: "SFMono-Regular", Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 360px;
+  overflow-y: auto;
 }
 @media (max-width: 720px) {
   .panel-tabs {

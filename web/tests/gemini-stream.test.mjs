@@ -87,7 +87,7 @@ test("broken streams retain delivered text but never count as a completed answer
         { ...params, onText() {} },
         async () => new Response("data: invalid-json\n\n"),
       ),
-    /응답 형식/,
+    /invalid-json/,
   );
   await assert.rejects(
     () =>
@@ -98,7 +98,62 @@ test("broken streams retain delivered text but never count as a completed answer
             status: 429,
           }),
       ),
-    /사용 한도/,
+    /quota/,
+  );
+});
+
+test("in-band SSE errors preserve all provider details and already streamed text", async () => {
+  const seen = [],
+    raw = JSON.stringify({
+      error: {
+        code: 429,
+        status: "RESOURCE_EXHAUSTED",
+        message: "quota " + params.apiKey,
+        details: [{ retryDelay: "45s", quotaId: "FreeTier" }],
+      },
+    });
+  await assert.rejects(
+    () =>
+      askGemini(
+        { ...params, onText: (text) => seen.push(text) },
+        async () => new Response(frame("partial") + "data: " + raw + "\n\n"),
+      ),
+    (error) =>
+      error.message ===
+      "HTTP 200\n" + raw.replaceAll(params.apiKey, "[API_KEY_REDACTED]"),
+  );
+  assert.deepEqual(seen, ["partial"]);
+  await assert.rejects(
+    () =>
+      askGemini(
+        { ...params, onText() {} },
+        async () =>
+          new Response(raw, {
+            headers: { "content-type": "application/json" },
+          }),
+      ),
+    (error) =>
+      error.message.includes('"retryDelay":"45s"') &&
+      !error.message.includes(params.apiKey),
+  );
+});
+
+test("blocked SSE responses retain the provider's finish reason and safety ratings", async () => {
+  const raw = JSON.stringify({
+    candidates: [
+      {
+        finishReason: "RECITATION",
+        citationMetadata: { reason: "provider detail" },
+      },
+    ],
+  });
+  await assert.rejects(
+    () =>
+      askGemini(
+        { ...params, onText() {} },
+        async () => new Response("data: " + raw + "\n\n"),
+      ),
+    (error) => error.message === "HTTP 200\n" + raw,
   );
 });
 

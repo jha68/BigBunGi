@@ -125,7 +125,6 @@ export function validConversation(turns) {
       typeof turn.answer === "string" &&
       turn.answer.length <= 60000 &&
       typeof turn.error === "string" &&
-      turn.error.length <= 1500 &&
       ["pending", "complete", "error"].includes(turn.status) &&
       typeof turn.model === "string" &&
       /^models\/gemini-[a-zA-Z0-9._-]{1,180}$/.test(turn.model) &&

@@ -345,6 +345,21 @@ test("per-problem conversations are encrypted, private, CAS protected and retain
       .first()
   ).data;
   assert.notEqual(ciphertext, second);
+  const failed = {
+    ...turn,
+    status: "error",
+    answer: "partial",
+    error:
+      "HTTP 429\n" +
+      JSON.stringify({
+        error: { message: "quota exceeded", details: "x".repeat(5000) },
+      }),
+  };
+  assert.equal(
+    (await call(path, "PUT", { revision: 3, turns: [failed] })).status,
+    200,
+  );
+  assert.deepEqual((await (await call(path)).json()).turns, [failed]);
 });
 
 test("logout invalidates sessions, expired sessions are rejected, and wrong passwords are rate limited", async () => {

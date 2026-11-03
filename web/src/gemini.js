@@ -149,36 +149,25 @@ export function makeNoteRequest({ history = [], apiKey = "" }) {
   );
 }
 
-async function readResponse(response, apiKey) {
-  let body;
-  try {
-    body = await response.json();
-  } catch {
-    throw new GeminiError(
-      "Gemini에서 응답을 읽지 못했습니다. 잠시 후 다시 시도해 주세요.",
-      response.status,
-    );
-  }
-  if (response.ok) return body;
-  const messages = {
-    400: "요청이 거부되었습니다. API 키와 선택한 모델을 확인해 주세요.",
-    401: "API 키를 인증하지 못했습니다. 키를 다시 연결해 주세요.",
-    403: "API 키의 프로젝트 권한 또는 웹사이트 제한 설정을 확인해 주세요.",
-    404: "이 모델은 현재 사용할 수 없습니다. 모델 목록을 새로 불러와 선택해 주세요.",
-    429: "Gemini 사용 한도에 도달했습니다. 잠시 기다리거나 Google AI Studio에서 할당량을 확인해 주세요.",
-    500: "Gemini 서비스에 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.",
-    503: "Gemini가 일시적으로 혼잡합니다. 잠시 후 다시 시도해 주세요.",
-  };
-  const detail = redact(String(body.error?.message || ""), apiKey).slice(
-    0,
-    500,
-  );
-  throw new GeminiError(
-    (messages[response.status] ||
-      `Gemini 요청에 실패했습니다 (HTTP ${response.status}).`) +
-      (detail ? "\n" + detail : ""),
+function apiResponseError(raw, apiKey, response) {
+  const status = `HTTP ${response.status}${response.statusText ? " " + response.statusText : ""}`;
+  return new GeminiError(
+    status + (raw ? "\n" + redact(raw, apiKey) : ""),
     response.status,
   );
+}
+
+async function readResponse(response, apiKey) {
+  const raw = await response.text();
+  if (!response.ok) throw apiResponseError(raw, apiKey, response);
+  let body;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    throw apiResponseError(raw, apiKey, response);
+  }
+  if (body?.error) throw apiResponseError(raw, apiKey, response);
+  return body;
 }
 
 export async function listModels(apiKey, signal, fetcher = fetch) {
@@ -269,25 +258,18 @@ async function readGeminiStream(response, apiKey, onText) {
     try {
       body = JSON.parse(data);
     } catch {
-      throw new GeminiError(
-        "스트리밍 응답 형식이 올바르지 않습니다. 다시 시도해 주세요.",
-      );
+      throw apiResponseError(data, apiKey, response);
     }
-    if (body.error)
-      throw new GeminiError(
-        redact(
-          String(body.error.message || "Gemini 응답에 오류가 발생했습니다."),
-          apiKey,
-        ),
-      );
-    const candidate = body.candidates?.[0];
+    if (body?.error) throw apiResponseError(data, apiKey, response);
+    const candidate = body?.candidates?.[0];
     if (
-      body.promptFeedback?.blockReason ||
-      candidate?.finishReason === "SAFETY"
+      body?.promptFeedback?.blockReason ||
+      (candidate?.finishReason &&
+        !["STOP", "MAX_TOKENS", "FINISH_REASON_UNSPECIFIED"].includes(
+          candidate.finishReason,
+        ))
     )
-      throw new GeminiError(
-        "이 질문에 대한 응답이 제한되었습니다. 질문을 바꾸어 다시 시도해 주세요.",
-      );
+      throw apiResponseError(data, apiKey, response);
     if (
       candidate?.finishReason &&
       candidate.finishReason !== "FINISH_REASON_UNSPECIFIED"
@@ -359,26 +341,27 @@ export async function askGemini(
       referrerPolicy: "strict-origin-when-cross-origin",
     },
   );
-  if (streaming && response.ok)
+  if (
+    streaming &&
+    response.ok &&
+    !response.headers.get("content-type")?.includes("application/json")
+  )
     return readGeminiStream(response, apiKey, onText);
   const body = await readResponse(response, apiKey);
-  const candidate = body.candidates?.[0];
+  const candidate = body?.candidates?.[0];
   const text = candidate?.content?.parts
     ?.filter((part) => !part.thought && typeof part.text === "string")
     .map((part) => part.text)
     .join("\n");
-  if (!text?.trim()) {
-    if (
-      body.promptFeedback?.blockReason ||
-      candidate?.finishReason === "SAFETY"
-    )
-      throw new GeminiError(
-        "이 질문에 대한 응답이 제한되었습니다. 질문을 바꾸어 다시 시도해 주세요.",
-      );
-    throw new GeminiError(
-      "Gemini가 텍스트 답변을 반환하지 않았습니다. 다시 질문해 주세요.",
-    );
-  }
+  if (
+    !text?.trim() ||
+    body?.promptFeedback?.blockReason ||
+    (candidate?.finishReason &&
+      !["STOP", "MAX_TOKENS", "FINISH_REASON_UNSPECIFIED"].includes(
+        candidate.finishReason,
+      ))
+  )
+    throw apiResponseError(JSON.stringify(body, null, 2), apiKey, response);
   return {
     text: redact(text, apiKey),
     truncated: candidate.finishReason === "MAX_TOKENS",

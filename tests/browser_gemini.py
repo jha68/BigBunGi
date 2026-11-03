@@ -11,6 +11,12 @@ from browser_smoke import verified_download
 
 KEY = "test-only-gemini-key-not-real"
 NOTE_CODE = "for value in [1, 2]:\n    print('Gemini 코드 예시', value)"
+QUOTA_ERROR = {"error": {
+    "code": 429, "status": "RESOURCE_EXHAUSTED",
+    "message": "quota exceeded\n" + "provider diagnostic " * 100 + KEY + " <script>window.__error_xss=true</script>",
+    "details": [{"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "32s"},
+        {"quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier", "diagnostic": "END_OF_RAW_ERROR"}],
+}}
 
 
 async def main():
@@ -54,13 +60,13 @@ async def main():
                 if "입력된 질문과 AI 답변만 아주 짧게 요약" in json.dumps(payload, ensure_ascii=False):
                     note_attempts += 1
                     if note_attempts == 1:
-                        status, body = 429, {"error": {"message": "quota exceeded"}}
+                        status, body = 429, QUOTA_ERROR
                     else:
                         await note_release.wait()
                         body = {"candidates": [{"content": {"parts": [{"text": "Q. 오류 원인은?\nA. 출력 예시를 확인하세요.\n\n```python\n" + NOTE_CODE + "\n```"}]}, "finishReason": "STOP"}]}
                 elif "할당량 테스트" in question and not quota_once:
                     quota_once = True
-                    status, body = 429, {"error": {"message": "quota exceeded"}}
+                    status, body = 429, QUOTA_ERROR
                 else:
                     if "중지 테스트" in question:
                         await release.wait()
@@ -199,7 +205,11 @@ async def main():
         await edit('print("UPDATED_CODE")')
         await ask("할당량 테스트")
         await page.wait_for_selector(".gemini-turn .gemini-error")
-        assert "사용 한도" in await page.locator(".gemini-turn .gemini-error").inner_text()
+        raw_error = await page.locator(".gemini-turn .gemini-error > span").text_content()
+        assert raw_error.startswith("HTTP 429")
+        assert json.loads(raw_error.split("\n", 1)[1]) == json.loads(json.dumps(QUOTA_ERROR).replace(KEY, "[API_KEY_REDACTED]"))
+        assert "END_OF_RAW_ERROR" in raw_error and KEY not in raw_error
+        assert await page.evaluate("window.__error_xss !== true")
         await edit('print("RETRY_LATEST_CODE")')
         await page.get_by_role("button", name="다시 시도", exact=True).click()
         await page.wait_for_function("document.querySelectorAll('.gemini-answer .gemini-markdown').length === 2")
@@ -231,7 +241,9 @@ async def main():
         await page.get_by_role("textbox", name="풀이 노트", exact=True).fill("직접 작성한 메모")
         await page.get_by_role("button", name="AI 대화로 노트 생성", exact=True).click()
         await page.wait_for_selector(".note-ai [role=alert]")
-        assert "사용 한도" in await page.locator(".note-ai [role=alert]").inner_text()
+        note_error = await page.locator(".note-ai [role=alert]").text_content()
+        assert note_error.startswith("HTTP 429") and "END_OF_RAW_ERROR" in note_error
+        assert KEY not in note_error
         assert await page.get_by_role("textbox", name="풀이 노트", exact=True).input_value() == "직접 작성한 메모"
         await page.get_by_role("button", name="AI 대화로 노트 생성", exact=True).click()
         await page.get_by_role("button", name="노트 생성 중지", exact=True).wait_for()
@@ -338,6 +350,7 @@ async def main():
         assert not errors, errors
         print("PASS: cancellation, mobile layout, no key persistence and key cleared after reload.", flush=True)
         print("PASS: saved AI notes retain highlighted code blocks and indentation after editing, navigation, mobile rendering and reload.", flush=True)
+        print("PASS: chat and note failures display HTTP status and complete provider errors including quota/retry details, with API keys masked and HTML shown as text.", flush=True)
         await browser.close()
 
 
