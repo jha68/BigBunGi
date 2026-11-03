@@ -11,6 +11,7 @@ from browser_smoke import verified_download
 
 KEY = "test-only-gemini-key-not-real"
 NOTE_CODE = "for value in [1, 2]:\n    print('Gemini 코드 예시', value)"
+MATH = r"인라인 $x - \mu$ 및 $$Z = \frac{x - \mu}{\sigma}$$" + "\n\n$$\n" + r"Z = \frac{x - \mu}{\sigma}" + "\n$$"
 QUOTA_ERROR = {"error": {
     "code": 429, "status": "RESOURCE_EXHAUSTED",
     "message": "quota exceeded\n" + "provider diagnostic " * 100 + KEY + " <script>window.__error_xss=true</script>",
@@ -63,7 +64,7 @@ async def main():
                         status, body = 429, QUOTA_ERROR
                     else:
                         await note_release.wait()
-                        body = {"candidates": [{"content": {"parts": [{"text": "Q. 오류 원인은?\nA. 출력 예시를 확인하세요.\n\n```python\n" + NOTE_CODE + "\n```"}]}, "finishReason": "STOP"}]}
+                        body = {"candidates": [{"content": {"parts": [{"text": "Q. 오류 원인은?\nA. 출력 예시를 확인하세요.\n\n```python\n" + NOTE_CODE + "\n```\n\n" + MATH}]}, "finishReason": "STOP"}]}
                 elif "할당량 테스트" in question and not quota_once:
                     quota_once = True
                     status, body = 429, QUOTA_ERROR
@@ -71,6 +72,7 @@ async def main():
                     if "중지 테스트" in question:
                         await release.wait()
                     text = "현재 문제를 참고한 답변입니다.\n\n```python\nprint('Gemini 코드 예시')\n```\n\n<script>window.__gemini_xss = true</script>\n[unsafe](javascript:alert(1))"
+                    text += "\n\n" + MATH + "\n\n" + r"코드 `$x$`와 잘못된 수식 $\frac{x}$"
                     body = {"candidates": [{"content": {"parts": [{"text": text}]}, "finishReason": "STOP"}]}
             try:
                 streamed = status == 200 and "streamGenerateContent" in req.url
@@ -139,6 +141,8 @@ async def main():
             assert "```" not in await saved.inner_text()
             colors = await code.locator(".cm-line span").evaluate_all("nodes => [...new Set(nodes.map(node => getComputedStyle(node).color))]")
             assert len(colors) >= 2, colors
+            assert await saved.locator(".katex").count() == 3
+            assert await saved.locator(".katex-display").count() == 1
 
         source = 'print("CONTEXT_STDOUT")\nraise ValueError("CONTEXT_ERROR")'
         await edit(source)
@@ -201,6 +205,13 @@ async def main():
         assert await page.get_by_role("textbox", name="Python 코드 예시").get_attribute("contenteditable") == "false"
         assert not await page.evaluate("window.__gemini_xss || false")
         assert not await page.locator('.gemini-markdown a[href^="javascript:"]').count()
+        assert await page.locator(".gemini-answer .katex").count() == 3
+        assert await page.locator(".gemini-answer .katex-display .mfrac").count() == 1
+        assert await page.locator(".gemini-answer .katex-error").count() == 1
+        assert await page.locator(".gemini-answer code").filter(has_text="$x$").count() == 1
+        await page.evaluate("document.fonts.ready")
+        assert await page.evaluate("document.fonts.check('12px KaTeX_Main')")
+        print("PASS: inline, same-line double-dollar and display LaTeX render with bundled fonts; invalid math and literal code remain safe.", flush=True)
         await page.screenshot(path="/tmp/bigbungi-gemini.png", full_page=True)
         print("PASS: current problem, edited code and actual Python traceback sent; Markdown/code render safely.", flush=True)
 

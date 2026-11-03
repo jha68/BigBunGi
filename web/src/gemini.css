@@ -444,6 +444,12 @@
 .gemini-markdown p {
   margin: 0 0 10px;
 }
+.gemini-markdown .katex-display {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px 0;
+}
 .gemini-markdown > :last-child {
   margin-bottom: 0;
 }

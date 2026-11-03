@@ -1,6 +1,9 @@
 import React, { memo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 import CodeEditor from "./CodeEditor.jsx";
 
 const components = {
@@ -39,7 +42,8 @@ export default memo(function Markdown({ text }) {
   return (
     <div className="gemini-markdown">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[[rehypeKatex, { trust: false }]]}
         components={components}
         skipHtml
       >

@@ -9,6 +9,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           markdown: ["react-markdown", "remark-gfm"],
+          math: ["remark-math", "rehype-katex", "katex"],
           editor: [
             "codemirror",
             "@codemirror/lang-python",
