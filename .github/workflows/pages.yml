@@ -116,16 +116,16 @@ jobs:
                 if (!response.ok) throw new Error('Catalog HTTP status: ' + response.status);
                 const catalog = await response.json();
                 const counts = [1, 2, 3].map(type => catalog.filter(p => p.type === type).length);
-                if (counts.join(',') !== '10,3,3') throw new Error('Unexpected exercise counts: ' + counts);
+                if (counts.join(',') !== '30,10,10') throw new Error('Unexpected exercise counts: ' + counts);
                 const assets = [...html.matchAll(/(?:src|href)="([^"]+\.(?:js|css))"/g)].map(match => match[1]);
                 if (!assets.length) throw new Error('Built assets missing from HTML');
-                for (const path of [...assets, 'python-worker.js', 'content/problems/t1-01.json']) {
+                for (const path of [...assets, 'python-worker.js', 'content/problems/t1-01.json', 'content/problems/t1-30.json', 'content/problems/t2-10.json', 'content/problems/t3-10.json']) {
                   const asset = await fetch(endpoint(path), options());
                   if (!asset.ok) throw new Error('Missing application asset: ' + path);
                 }
-                core.notice('LIVE VERIFIED: HTTPS 200, application assets, Python worker, and 16 exercises (10/3/3) at ' + origin);
+                core.notice('LIVE VERIFIED: HTTPS 200, application assets, Python worker, and 50 exercises (30/10/10) at ' + origin);
                 await core.summary.addHeading('BigBunGi is live').addLink(origin, origin)
-                  .addRaw('\n\nHTTPS, built assets, Python worker and all 16 exercise entries verified.\n').write();
+                  .addRaw('\n\nHTTPS, built assets, Python worker and all 50 exercise entries verified.\n').write();
                 return;
               } catch (error) {
                 failure = error;

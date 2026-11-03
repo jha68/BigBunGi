@@ -8,7 +8,7 @@ import pandas as pd
 from scipy.special import expit
 from sklearn.model_selection import train_test_split
 
-VERSION = "2026.1"
+VERSION = "2026.2"
 
 
 def generate(root: Path) -> dict:
@@ -98,6 +98,9 @@ def generate(root: Path) -> dict:
     outcome=rng.binomial(1,risk)
     add("t3-03", screening=pd.DataFrame({"id":range(1,n+1),"age":age,"history":history,"glucose":glucose,"outcome":outcome}))
 
+    from .extra_datasets import generate_additional
+    generate_additional(datasets, private, split_prediction)
+
     for pid,frames in datasets.items():
         directory=root/pid; directory.mkdir(exist_ok=True)
         for name,df in frames.items():
@@ -106,8 +109,9 @@ def generate(root: Path) -> dict:
     return private
 
 
-def split_prediction(pid,frame,target,target_name,datasets,private):
-    stratify=target if pid!="t2-02" else None
+def split_prediction(pid,frame,target,target_name,datasets,private,*,classification=None):
+    if classification is None: classification = pid != "t2-02"
+    stratify=target if classification else None
     train_idx,test_idx=train_test_split(np.arange(len(frame)),test_size=.25,random_state=42,stratify=stratify)
     train=frame.iloc[train_idx].copy(); train[target_name]=np.asarray(target)[train_idx]
     test=frame.iloc[test_idx].copy()
@@ -119,4 +123,4 @@ if __name__=="__main__":
     import argparse
     parser=argparse.ArgumentParser(); parser.add_argument("--output",type=Path,default=Path(".runtime/datasets")); args=parser.parse_args()
     generate(args.output)
-    print(f"Generated 16 deterministic datasets in {args.output}")
+    print(f"Generated 50 deterministic datasets in {args.output}")

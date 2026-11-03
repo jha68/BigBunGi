@@ -109,7 +109,10 @@ test("RMSE and macro F1 use their specified direction and labels", () => {
     /0, 1, 2/,
   );
 });
-for (const id of ["t2-01", "t2-02", "t2-03"]) {
+for (const id of Array.from(
+  { length: 10 },
+  (_, index) => `t2-${String(index + 1).padStart(2, "0")}`,
+)) {
   test(`real reference metric matches scikit-learn: ${id}`, () => {
     const path = new URL(`../../tests/fixtures/${id}.json`, import.meta.url);
     assert.ok(

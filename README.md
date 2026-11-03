@@ -1,14 +1,14 @@
 # 빅분기 · 실기 연습실
 
-빅데이터분석기사 실기 스타일의 **직접 만든 16문제**를 풀고, 브라우저에서 실제 Python을 실행하는 학습 웹앱입니다.
+빅데이터분석기사 실기 스타일의 **직접 만든 50문제**를 풀고, 브라우저에서 실제 Python을 실행하는 학습 웹앱입니다.
 
 배포 주소: **https://bigbungi.junununseo.com**
 
 ## 제공 기능
 
-- **1유형 10문제:** 조건 추출, 결측치, IQR·Z-score, 취소 거래, 날짜·전환율, merge, 정규화, 피벗, CAGR.
-- **2유형 3문제:** 이진분류(ROC AUC), 회귀(RMSE), 다중분류(Macro F1). 결측치·범주형·잡음이 있는 학습/평가 데이터와 CSV 제출 채점.
-- **3유형 3문제:** 대응·단일표본 t-검정, ANOVA, 상관분석, OLS, 카이제곱, 비벌점 로지스틱 회귀, 오즈비·민감도.
+- **1유형 30문제:** 조건 추출, 결측치, IQR·Z-score, 취소 거래, 날짜·전환율, merge, 정규화, 피벗, CAGR, 중복 제거, 부서별 대체, 문자열 정제, 가중평균, 재구매율, 구간화, 이동평균, 누적 도달, 왜도·로그 변환.
+- **2유형 10문제:** 이진분류(ROC AUC), 회귀(RMSE), 다중분류(Macro F1). 결측치·범주형·잡음이 있는 학습/평가 데이터와 CSV 제출 채점. 통신·주거·게임·의료·중고차·와인·마케팅·배달·설비·신용 위험 데이터.
+- **3유형 10문제:** 대응·단일표본 t-검정, ANOVA, 상관분석, OLS, 카이제곱, 비벌점 로지스틱 회귀, 오즈비·민감도·특이도, Welch·Levene, 카이제곱 적합도, 두 비율 z검정·Wilson 구간, Spearman, 중첩 모형 F검정.
 - 코드 편집기, `Ctrl/Cmd+Enter` 실행, stdout·경고·Python traceback, 데이터프레임·그래프 표시, 실행 중지와 60초 제한.
 - 선택 영역의 파란색 강조·테두리, 줄 번호·Python 문법 강조·자동 줄바꿈이 있는 읽기 전용 기준 풀이.
 - 데이터 미리보기·변수 설명·CSV 다운로드, 단계별 힌트, 기준 풀이, 풀이 노트, 진행률, 모바일 화면.
@@ -100,7 +100,7 @@ npm run dev -- --port 5173
 `bigbungi.prepare`는 CSV, 정답, 해설, 미리보기를 `web/public/content/`에 생성합니다. 소스가 달라질 때만 재생성하며 `--force`로 강제로 갱신할 수 있습니다. 기준 정답은 반올림된 실제 배포 CSV를 읽어 다시 계산합니다. 생성 파일은 Git에 넣지 않고 배포 시 재현합니다.
 
 ```sh
-# 저장소 루트: 실제 CSV로 16개 기준 풀이와 모델 성능 검증
+# 저장소 루트: 실제 CSV로 50개 기준 풀이와 모델 성능 검증
 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v
 
 # 위 검증이 만드는 scikit-learn 지표 fixture와 JavaScript 채점 결과 비교
@@ -120,7 +120,7 @@ CHROMIUM_PATH=/usr/bin/chromium .venv/bin/python tests/browser_editor.py
 APP_URL=http://127.0.0.1:5173/ CHROMIUM_PATH=/usr/bin/chromium .venv/bin/python tests/browser_gemini.py
 ```
 
-실제 WebAssembly Python에서 16개 기준 풀이를 실행하고 채점하며 오류·DataFrame·그래프·중지·자동 저장·모바일 탐색을 검증합니다. 클라우드 프록시의 CA를 Chromium이 신뢰하지 않는 경우 테스트는 Python의 검증된 TLS 전송으로 CDN만 연결합니다. TLS 및 Pyodide 패키지 해시 검증은 유지합니다.
+실제 WebAssembly Python에서 50개 기준 풀이를 실행하고 채점하며 오류·DataFrame·그래프·중지·자동 저장·모바일 탐색을 검증합니다. 클라우드 프록시의 CA를 Chromium이 신뢰하지 않는 경우 테스트는 Python의 검증된 TLS 전송으로 CDN만 연결합니다. TLS 및 Pyodide 패키지 해시 검증은 유지합니다.
 
 Gemini 테스트는 Google의 HTTP 응답을 모의 처리하고 실제 Python 오류를 컨텍스트에 넣어 검증합니다. 유효한 개인 키가 없는 개발 환경에서는 실제 Gemini 답변 생성까지 검증했다고 간주하지 않습니다.
 
@@ -132,6 +132,8 @@ Gemini 테스트는 Google의 HTTP 응답을 모의 처리하고 실제 Python �
 4. **코드 실행 → 채점하기** 순서로 확인합니다. 코드가 바뀌면 다시 실행해야 합니다.
 5. 막히면 단계별 힌트나 해설을 열어 보고 다시 작성합니다.
 
+채점 이력(통과 여부와 무관하게 1회 이상 채점)이 있는 문제를 다시 열거나 현재 문제를 다시 클릭하면 **다시 풀기** 알림이 나타납니다. **코드만 초기화**는 해당 문제의 초안을 기본 코드로 바꾸고, 노트·AI 대화·입력 답안·통과/채점 기록·다른 문제의 코드는 유지합니다. **이어서 풀기**나 `Esc`는 코드를 그대로 둡니다. AI 대화의 새로고침 시 유지 범위는 기존과 같으며, 재풀이 초기화 자체에서는 대화를 지우지 않습니다.
+
 ## GitHub Pages / 도메인
 
 `main`에 push하면 `.github/workflows/pages.yml`이 다음을 수행합니다.
@@ -139,7 +141,7 @@ Gemini 테스트는 Google의 HTTP 응답을 모의 처리하고 실제 Python �
 1. 고정 버전 Python·Node 환경에서 원본 데이터와 정답 생성.
 2. Python 문제·모델 검증 및 JavaScript 채점 검증.
 3. Vite 빌드 후 GitHub Pages 아티팩트 배포.
-4. Pages의 도메인 설정을 확인하고, 공개 HTTPS 주소의 HTML·스크립트·Python worker·16문제 카탈로그를 실제 요청으로 검증.
+4. Pages의 도메인 설정을 확인하고, 공개 HTTPS 주소의 HTML·스크립트·Python worker·50문제 카탈로그를 실제 요청으로 검증.
 
 Cloudflare DNS 레코드는 다음과 같습니다. DNS 레코드를 직접 설정한 경우 Cloudflare API 토큰은 필요하지 않습니다.
 
@@ -153,7 +155,9 @@ Cloudflare DNS 레코드는 다음과 같습니다. DNS 레코드를 직접 설�
 
 | 경로 | 역할 |
 |---|---|
-| `bigbungi/content.py` | 16문제의 문제문·조건·스키마·힌트·기준 풀이 |
+| `bigbungi/extra_content.py` | 추가 34문제의 조건·스키마·기준 풀이·힌트·해설 |
+| `bigbungi/extra_datasets.py` | 기존 데이터와 독립된 시드로 추가 합성 데이터 생성 |
+| `bigbungi/content.py` | 기존 문제와 공통 출제·제출 계약, 50문제 카탈로그 조립 |
 | `bigbungi/datasets.py` | 합성 데이터 생성 |
 | `bigbungi/prepare.py` | 배포 자료와 정답 생성 |
 | `web/src/main.jsx` | 연습 화면·자동 저장·실행 관리 |

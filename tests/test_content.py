@@ -24,8 +24,8 @@ class ContentTests(unittest.TestCase):
         cls.keys=json.loads((PUBLIC/"grading.json").read_text())
 
     def test_requested_curriculum_and_contracts(self):
-        self.assertEqual([sum(p['type']==t for p in PROBLEMS) for t in [1,2,3]],[10,3,3])
-        self.assertEqual(len(set(p['id'] for p in PROBLEMS)),16)
+        self.assertEqual([sum(p['type']==t for p in PROBLEMS) for t in [1,2,3]],[30,10,10])
+        self.assertEqual({p['id'] for p in PROBLEMS}, {f"t{kind}-{number:02d}" for kind,count in [(1,30),(2,10),(3,10)] for number in range(1,count+1)})
         for p in PROBLEMS:
             with self.subTest(problem=p['id']):
                 public=json.loads((PUBLIC/'problems'/f"{p['id']}.json").read_text())

@@ -7,7 +7,7 @@ import asyncio
 import json
 import os
 import urllib.request
-from playwright.async_api import async_playwright
+from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 
 ORIGIN = "https://bigbungi.junununseo.com"
 API = "https://bigbungi-api.junununseo.com"
@@ -60,6 +60,12 @@ async def main():
             await page.get_by_role("button", name="로그인", exact=True).click()
         async def saved(page):
             await page.locator(".sync-status.saved").wait_for(timeout=15000)
+            await page.locator(".problem-heading").wait_for()
+            try:
+                await page.get_by_role("button", name="이어서 풀기", exact=True).wait_for(timeout=800)
+                await page.get_by_role("button", name="이어서 풀기", exact=True).click()
+            except PlaywrightTimeoutError:
+                pass
         async def edit(page, text):
             editor = page.get_by_role("textbox", name="Python 코드 편집기", exact=True)
             await editor.click(); await editor.press("Control+a"); await page.keyboard.insert_text(text)
@@ -92,6 +98,7 @@ async def main():
         print("PASS: encrypted Gemini key and selected model automatically restore after refresh without browser storage.", flush=True)
 
         b = await context(); other = await b.new_page(); await other.goto(ORIGIN); await login(other)
+        await saved(other)
         await other.get_by_role("tab", name="AI 질문", exact=True).click()
         await other.wait_for_selector(".gemini-status.ready")
         assert "Gemini 2.5 Flash" in await other.locator(".gemini-selected-model").inner_text()

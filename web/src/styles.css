@@ -1341,6 +1341,46 @@ tr:nth-child(even) {
   line-height: 1.8;
   margin-bottom: 19px;
 }
+.retry-problem-dialog {
+  width: min(440px, calc(100vw - 32px));
+  border: 1px solid #d5e1ec;
+  border-radius: 12px;
+  padding: 26px;
+  color: #354e69;
+  box-shadow: 0 14px 50px #15294430;
+}
+.retry-problem-dialog::backdrop {
+  background: #172b4866;
+}
+.retry-problem-dialog h2 {
+  margin: 0 0 14px;
+  font-size: 19px;
+}
+.retry-problem-dialog strong {
+  font-size: 13px;
+}
+.retry-problem-dialog p {
+  font-size: 12px;
+  line-height: 1.9;
+}
+.retry-problem-dialog > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 22px;
+}
+.retry-problem-dialog button {
+  padding: 9px 12px;
+  border-radius: 6px;
+  border: 1px solid #cddbe7;
+  color: #496a89;
+  background: #f6f9fc;
+}
+.retry-problem-dialog .retry-reset {
+  background: #287e90;
+  border-color: #287e90;
+  color: white;
+}
 .notes-editor {
   width: 100%;
   min-height: 330px;

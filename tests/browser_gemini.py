@@ -83,7 +83,7 @@ async def main():
         assert await page.get_by_role("tablist", name="문제 정보", exact=True).get_by_role("tab", name="AI 질문", exact=True).count() == 1
         result_tabs = page.get_by_role("tablist", name="실행과 제출", exact=True)
         assert [text.strip() for text in await result_tabs.get_by_role("tab").all_text_contents()] == ["실행 결과", "답안 제출"]
-        await page.wait_for_function("!document.querySelector('[data-testid=run-code]').disabled", timeout=120000)
+        await page.wait_for_function("!!document.querySelector('[data-testid=run-code]') && !document.querySelector('[data-testid=run-code]').disabled", timeout=120000)
         editor = page.get_by_role("textbox", name="Python 코드 편집기", exact=True)
 
         async def edit(source):
@@ -247,6 +247,37 @@ async def main():
         assert await page.locator(".gemini-turn").count() == 2
         print("PASS: AI notes share model/key, include only this problem's completed chats, handle quota and preserve concurrent edits across navigation.", flush=True)
 
+        # Mark this problem solved, then exercise both re-entry choices.
+        reference = await page.evaluate("async () => (await (await fetch('content/solutions/t1-01.json')).json())")
+        starter = await page.evaluate("async () => (await (await fetch('content/problems/t1-01.json')).json()).starter")
+        await edit(reference["code"])
+        await editor.press("Control+Enter")
+        await page.wait_for_function("!!document.querySelector('[data-testid=run-code]') && !document.querySelector('[data-testid=run-code]').disabled")
+        await page.get_by_test_id("grade-code").click()
+        await page.wait_for_function("JSON.parse(localStorage.getItem('bigbungi.practice.v1')).progress['t1-01']?.passed === true")
+        before_reset = await page.evaluate("JSON.parse(localStorage.getItem('bigbungi.practice.v1'))")
+        turn_count = await page.locator(".gemini-turn").count()
+        await page.locator(".question-link").nth(1).click()
+        await page.locator(".question-link").nth(0).click()
+        await page.get_by_role("dialog", name="다시 풀기", exact=True).wait_for()
+        await page.screenshot(path="/tmp/bigbungi-retry-problem.png", full_page=True)
+        await page.get_by_role("button", name="이어서 풀기", exact=True).click()
+        assert (await editor.inner_text()).rstrip() == reference["code"].rstrip()
+        await page.locator(".question-link").nth(1).click()
+        await page.locator(".question-link").nth(0).click()
+        await page.get_by_role("button", name="코드만 초기화", exact=True).click()
+        await page.wait_for_function("source => JSON.parse(localStorage.getItem('bigbungi.practice.v1')).drafts['t1-01'] === source", arg=starter)
+        rendered_source = await editor.evaluate("e => Array.from(e.querySelectorAll('.cm-line')).map(line => line.textContent).join('\\n')")
+        assert rendered_source.rstrip() == starter.rstrip()
+        after_reset = await page.evaluate("JSON.parse(localStorage.getItem('bigbungi.practice.v1'))")
+        for field in ["answers", "notes", "progress"]:
+            assert after_reset[field] == before_reset[field], field
+        assert {k:v for k,v in after_reset["drafts"].items() if k != "t1-01"} == {k:v for k,v in before_reset["drafts"].items() if k != "t1-01"}
+        await page.get_by_role("tab", name="AI 질문", exact=True).click()
+        assert await page.locator(".gemini-turn").count() == turn_count
+        assert "Gemini 2.5 Pro" in await page.locator(".gemini-selected-model").inner_text()
+        print("PASS: solved-problem prompt, resume and code-only reset preserve notes, answers, progress, model and AI conversation.", flush=True)
+
         await page.get_by_role("textbox", name="Gemini에게 질문", exact=True).fill("중지 테스트")
         await page.get_by_role("button", name="Gemini 질문 보내기").click()
         await page.get_by_role("button", name="Gemini 응답 중지").click()
@@ -268,6 +299,7 @@ async def main():
         stored = await page.evaluate("JSON.stringify({...localStorage}) + JSON.stringify({...sessionStorage})")
         assert KEY not in stored, "API key persisted in browser storage"
         await page.reload(wait_until="networkidle")
+        await page.get_by_role("button", name="이어서 풀기", exact=True).click()
         await page.get_by_role("tab", name="노트", exact=True).click()
         assert await page.get_by_role("textbox", name="풀이 노트", exact=True).input_value() == note
         assert await page.get_by_role("button", name="AI 대화로 노트 생성", exact=True).is_disabled()

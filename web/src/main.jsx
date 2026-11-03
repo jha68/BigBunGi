@@ -50,17 +50,14 @@ const TYPE_INFO = {
   1: {
     name: "데이터 전처리",
     icon: Database,
-    count: 10,
   },
   2: {
     name: "머신러닝 모델링",
     icon: FlaskConical,
-    count: 3,
   },
   3: {
     name: "통계 분석",
     icon: BookOpen,
-    count: 3,
   },
 };
 
@@ -126,6 +123,39 @@ function DataTable({ columns, rows }) {
   );
 }
 
+function RetryProblemDialog({ problem, onContinue, onReset }) {
+  const dialog = useRef(null);
+  useEffect(() => {
+    const element = dialog.current;
+    element.showModal();
+    return () => element.close();
+  }, []);
+  return (
+    <dialog
+      ref={dialog}
+      className="retry-problem-dialog"
+      aria-labelledby="retry-problem-title"
+      onCancel={(event) => {
+        event.preventDefault();
+        onContinue();
+      }}
+    >
+      <h2 id="retry-problem-title">다시 풀기</h2>
+      <strong>{problem.title}</strong>
+      <p>이전에 풀이한 문제입니다. 코드를 초기화하고 다시 풀까요?</p>
+      <p>노트·AI 대화·제출 답안·진행도는 그대로 두고 코드만 초기화합니다.</p>
+      <div>
+        <button autoFocus onClick={onContinue}>
+          이어서 풀기
+        </button>
+        <button className="retry-reset" onClick={onReset}>
+          코드만 초기화
+        </button>
+      </div>
+    </dialog>
+  );
+}
+
 function App({ initialState = initial, onStateChange, syncControls }) {
   const [catalog, setCatalog] = useState([]),
     [selected, setSelected] = useState(
@@ -140,6 +170,7 @@ function App({ initialState = initial, onStateChange, syncControls }) {
   const [leftTab, setLeftTab] = useState("problem"),
     [bottomTab, setBottomTab] = useState("output");
   const [aiExpanded, setAiExpanded] = useState(false);
+  const [retryProblem, setRetryProblem] = useState(null);
   const [solutions, setSolutions] = useState({}),
     [hintCount, setHintCount] = useState({}),
     [fileIndex, setFileIndex] = useState(0);
@@ -206,6 +237,15 @@ function App({ initialState = initial, onStateChange, syncControls }) {
       live = false;
     };
   }, [selected]);
+  useEffect(() => {
+    // Re-entering a graded problem prompts once; grading the open problem does
+    // not interrupt the current attempt. Saved drafts alone remain resumable.
+    if (
+      problem &&
+      (progress[problem.id]?.passed || progress[problem.id]?.attempts > 0)
+    )
+      setRetryProblem(problem);
+  }, [problem?.id]);
   useEffect(() => {
     try {
       localStorage.setItem(
@@ -339,7 +379,12 @@ function App({ initialState = initial, onStateChange, syncControls }) {
   }, [startWorker]);
 
   function select(id) {
-    if (id === selected) return;
+    if (id === selected) {
+      if (problem && (progress[id]?.passed || progress[id]?.attempts > 0))
+        setRetryProblem(problem);
+      return;
+    }
+    setRetryProblem(null);
     setSelected(id);
     history.replaceState(null, "", "#" + id);
     setNavOpen(false);
@@ -476,7 +521,14 @@ function App({ initialState = initial, onStateChange, syncControls }) {
   }
   const result = results[selected],
     gradeResult = grades[selected];
-  const solved = Object.values(progress).filter((p) => p.passed).length;
+  const solved = catalog.filter((p) => progress[p.id]?.passed).length;
+  const totalProblems = catalog.length;
+  const typeCounts = Object.fromEntries(
+    [1, 2, 3].map((type) => [
+      type,
+      catalog.filter((p) => p.type === type).length,
+    ]),
+  );
   const kind = problem?.type || Number(selected[1]) || 1;
   const visible = catalog.filter(
     (p) =>
@@ -542,7 +594,7 @@ function App({ initialState = initial, onStateChange, syncControls }) {
                 </span>
                 <span className="type-count">
                   {passed}
-                  <em>/{TYPE_INFO[type].count}</em>
+                  <em>/{typeCounts[type]}</em>
                 </span>
               </button>
             );
@@ -550,7 +602,7 @@ function App({ initialState = initial, onStateChange, syncControls }) {
         </div>
         <div className="question-list-heading">
           <span>문제 목록</span>
-          <span>{TYPE_INFO[kind].count}문제</span>
+          <span>{typeCounts[kind]}문제</span>
         </div>
         <div className="search-field">
           <Search size={14} />
@@ -596,11 +648,15 @@ function App({ initialState = initial, onStateChange, syncControls }) {
             <span>차곡차곡, 나의 학습 기록</span>
             <strong>
               {solved}
-              <span> / 16</span>
+              <span> / {totalProblems}</span>
             </strong>
           </div>
           <div className="progress-track">
-            <i style={{ width: `${(solved / 16) * 100}%` }} />
+            <i
+              style={{
+                width: `${(solved / Math.max(totalProblems, 1)) * 100}%`,
+              }}
+            />
           </div>
           <p>
             <ShieldCheck size={13} /> 풀이 기록은 이 브라우저에 저장돼요
@@ -1432,6 +1488,19 @@ function App({ initialState = initial, onStateChange, syncControls }) {
           <span>Python · pandas · scikit-learn · scipy · statsmodels</span>
         </footer>
       </main>
+      {retryProblem && (
+        <RetryProblemDialog
+          problem={retryProblem}
+          onContinue={() => setRetryProblem(null)}
+          onReset={() => {
+            setDrafts((previous) => ({
+              ...previous,
+              [retryProblem.id]: retryProblem.starter,
+            }));
+            setRetryProblem(null);
+          }}
+        />
+      )}
       {toast && (
         <div className="toast" role="status">
           <CheckCircle2 size={17} />

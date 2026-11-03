@@ -31,10 +31,11 @@ def reference_result(problem, directory):
 
 
 def prepare(force=False):
-    fingerprint=hashlib.sha256((ROOT/"bigbungi/content.py").read_bytes()+(ROOT/"bigbungi/datasets.py").read_bytes()).hexdigest()
+    sources=["content.py","datasets.py","extra_content.py","extra_datasets.py"]
+    fingerprint=hashlib.sha256(b"".join((ROOT/"bigbungi"/name).read_bytes() for name in sources)).hexdigest()
     marker=PUBLIC/"build.json"
     if not force and marker.exists() and json.loads(marker.read_text()).get("fingerprint")==fingerprint:
-        print("Static content is current (16 exercises).")
+        print(f"Static content is current ({len(PROBLEMS)} exercises).")
         return
     targets=generate(DATA)
     PUBLIC.mkdir(parents=True,exist_ok=True)

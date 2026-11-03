@@ -87,13 +87,15 @@ async def main():
         await execute('import pandas as pd\npd.read_csv("data/customers.csv").head(3)')
         assert await page.locator('.console-output tbody tr').count()==3
 
-        curriculum=[(1,1)] if os.environ.get('BROWSER_MODE')=='quick' else [(1,10),(2,3),(3,3)]
+        titles={p['id']:p['title'] for p in json.loads((ROOT/'web/public/content/catalog.json').read_text())}
+        curriculum=[(1,1)] if os.environ.get('BROWSER_MODE')=='quick' else [(1,30),(2,10),(3,10)]
         for kind,count in curriculum:
             for number in range(1,count+1):
                 pid=f't{kind}-{number:02d}'
                 if kind!=int((await page.locator('.problem-kicker .badge').inner_text())[4]):
                     await page.locator('.type-button').nth(kind-1).click()
                 await page.locator('.question-link').nth(number-1).click()
+                await page.wait_for_function("title => document.querySelector('.problem-heading h2')?.textContent === title",arg=titles[pid])
                 await page.wait_for_selector('.code-editor .cm-content')
                 solution=json.loads((ROOT/'web/public/content/solutions'/f'{pid}.json').read_text())
                 await execute(solution['code'])
@@ -106,7 +108,7 @@ async def main():
                 print('BROWSER PASS:',pid,text.splitlines()[0],flush=True)
                 if kind==2:await page.screenshot(path=f'/tmp/bigbungi-{pid}.png',full_page=True)
         expected=sum(count for _,count in curriculum)
-        assert f'{expected} / 16' in await page.locator('.progress-caption strong').inner_text()
+        assert f'{expected} / 50' in await page.locator('.progress-caption strong').inner_text()
         await page.screenshot(path='/tmp/bigbungi-complete.png',full_page=True)
         await execute('import matplotlib\nmatplotlib.use("Agg")\nimport matplotlib.pyplot as plt\nplt.plot([1,2,3],[1,4,9])\nplt.title("Real Python plot")\nplt.show()')
         assert await page.locator('.result-plot').count()==1

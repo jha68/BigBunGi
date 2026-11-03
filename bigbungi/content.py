@@ -196,7 +196,7 @@ test = pd.read_csv("data/test.csv")
 ''')
 
 
-def prediction(pid,title,scenario,columns,target,prediction_name,metric,threshold,model,final,explanation):
+def prediction(pid,title,scenario,columns,target,prediction_name,metric,threshold,model,final,explanation,*,class_description=None,baseline=None):
     shared=["id|정수|중복 없는 식별자"]+columns
     files=[file("train","학습 데이터: 예측 대상 열 포함",shared+[f"{target}|수치|학습 정답(예측 대상)"]),file("test","평가 데이터: 예측 대상 열 없음",shared)]
     higher=metric!="rmse"
@@ -204,8 +204,8 @@ def prediction(pid,title,scenario,columns,target,prediction_name,metric,threshol
            "훈련·검증 데이터를 분리하여 모델 성능을 점검하세요. 전처리도 훈련 데이터에 fit하고 평가 데이터에는 transform만 적용합니다.",
            f"test.csv의 모든 행을 예측하여 submission.csv를 만드세요. 열은 id, {prediction_name} 두 개만 사용하고, index=False로 저장합니다.",
            f"평가 지표는 {metric.upper()}입니다. 연습 통과 기준은 {threshold} {'이상' if higher else '이하'}입니다. 실제 시험의 채점 규칙을 재현한 점수는 아닙니다."]
-    if metric=="roc_auc": steps.insert(2,"양성 클래스(churn=1)의 발생 확률을 제출합니다. 0/1 분류값이 아닌 predict_proba의 양성 확률을 사용하세요.")
-    if metric=="macro_f1": steps.insert(2,"level의 클래스는 0(초급), 1(중급), 2(고급)입니다. 확률이 아닌 최종 클래스 번호를 제출합니다.")
+    if metric=="roc_auc": steps.insert(2,f"양성 클래스({target}=1)의 발생 확률을 제출합니다. 0/1 분류값이 아닌 predict_proba의 양성 확률을 사용하세요.")
+    if metric=="macro_f1": steps.insert(2,f"{target}의 클래스는 {class_description or '0(초급), 1(중급), 2(고급)'}입니다. 확률이 아닌 최종 클래스 번호를 제출합니다.")
     sol=PREDICTION_PRELUDE+f'\ntarget = "{target}"\n'+code('''
 X = train.drop(columns=["id", target])
 y = train[target]
@@ -222,21 +222,22 @@ preprocessor = ColumnTransformer([
 pipeline = Pipeline([("preprocess", preprocessor), ("model", model)])
 X_train, X_valid, y_train, y_valid = train_test_split(
     X, y, test_size=0.2, random_state=42,
-    stratify=y if target != "monthly_rent" else None
+    stratify=STRATIFY_TARGET
 )
 pipeline.fit(X_train, y_train)
-if target == "churn":
+if METRIC_NAME == "roc_auc":
     valid_prediction = pipeline.predict_proba(X_valid)[:, 1]
     print("검증 ROC AUC:", roc_auc_score(y_valid, valid_prediction))
-elif target == "level":
+elif METRIC_NAME == "macro_f1":
     print("검증 Macro F1:", f1_score(y_valid, pipeline.predict(X_valid), average="macro"))
 else:
     print("검증 RMSE:", mean_squared_error(y_valid, pipeline.predict(X_valid))**0.5)
 # 검증 후 전체 학습 데이터로 다시 학습합니다. test의 정답은 사용하지 않습니다.
 pipeline.fit(X, y)
 ''')+final+f'\npd.DataFrame({{"id": test["id"], "{prediction_name}": predictions}}).to_csv("submission.csv", index=False)\nprint("submission.csv 저장 완료:", len(predictions), "행")\n'
+    sol=sol.replace("STRATIFY_TARGET", "None" if metric=="rmse" else "y").replace("METRIC_NAME",repr(metric))
     p=question(pid,title,scenario,steps,files,[],sol,["범주형 변수는 OneHotEncoder, 수치형 결측치는 SimpleImputer로 처리할 수 있습니다. Pipeline은 데이터 누수를 줄여 줍니다.","분류는 stratify를 사용한 검증 분할을 권장합니다. 회귀의 RMSE는 MSE의 제곱근입니다. 먼저 기준 모델을 만든 뒤 개선하세요."],explanation,difficulty="중상",minutes=35,tags=[{"roc_auc":"이진 분류","rmse":"회귀","macro_f1":"다중 분류"}[metric],"전처리","CSV 제출"])
-    p["submission"]={"target":target,"prediction":prediction_name,"metric":metric,"threshold":threshold,"higher":higher,"baseline":.5 if metric=="roc_auc" else .333 if metric=="macro_f1" else 1500,"filename":"submission.csv"}
+    p["submission"]={"target":target,"prediction":prediction_name,"metric":metric,"threshold":threshold,"higher":higher,"baseline":baseline if baseline is not None else .5 if metric=="roc_auc" else .333 if metric=="macro_f1" else 1500,"filename":"submission.csv"}
     p["starter"] = 'import pandas as pd\nimport numpy as np\nfrom sklearn.model_selection import train_test_split\n\ntrain = pd.read_csv("data/train.csv")\ntest = pd.read_csv("data/test.csv")\n\nprint(train.head())\nprint(train.isna().sum())\n\n# 1. id와 예측 대상 열을 제외해 설명변수 만들기\n# 2. 훈련/검증 분리 및 전처리, 모델 학습\n# 3. test 데이터 예측\n# 4. 아래 형식으로 제출 파일 저장\n'+f'# pd.DataFrame({{"id": test["id"], "{prediction_name}": predictions}}).to_csv("submission.csv", index=False)\n'
     return p
 
@@ -329,4 +330,7 @@ question("t3-03","위험도 분류와 로지스틱 회귀",
  "sklearn LogisticRegression의 기본 벌점화는 이 문제의 조건과 다릅니다. statsmodels.Logit으로 비벌점 최대우도 추정을 수행합니다. Pre·Yes의 오즈비는 같은 나이에서 No와 비교한 값입니다. 정확도와 민감도를 혼동하지 마세요.",difficulty="상",minutes=25,tags=["카이제곱","로지스틱 회귀","민감도"]),
 ]
 
+from .extra_content import additional_problems
+PROBLEMS += additional_problems(question, file, answer, prediction)
+PROBLEMS.sort(key=lambda p: (p["type"], p["number"]))
 PROBLEM_MAP={p["id"]:p for p in PROBLEMS}
