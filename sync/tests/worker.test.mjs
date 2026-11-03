@@ -233,6 +233,43 @@ test("Gemini settings are encrypted at rest, private, revision protected and iso
   });
 });
 
+test("two keys and the active choice are encrypted together; legacy settings and input validation remain supported", async () => {
+  const settings = {
+    apiKey: "primary-test-key",
+    backupApiKey: "backup-test-key",
+    activeKeyIndex: 1,
+    model: "models/gemini-2.5-flash",
+  };
+  assert.equal(
+    (await call("/settings", "PUT", { revision: 3, settings })).status,
+    200,
+  );
+  const raw = (
+    await db
+      .prepare("SELECT data FROM gemini_settings WHERE id = 'owner'")
+      .first()
+  ).data;
+  assert.ok(
+    !raw.includes(settings.apiKey) && !raw.includes(settings.backupApiKey),
+  );
+  assert.deepEqual((await (await call("/settings")).json()).settings, settings);
+  for (const invalid of [
+    { ...settings, thirdApiKey: "no" },
+    { ...settings, activeKeyIndex: 2 },
+    { ...settings, backupApiKey: "bad\nkey" },
+    { ...settings, backupApiKey: "", activeKeyIndex: 1 },
+  ])
+    assert.equal(
+      (await call("/settings", "PUT", { revision: 4, settings: invalid }))
+        .status,
+      400,
+    );
+  assert.equal(
+    (await call("/settings", "PUT", { revision: 4, settings: null })).status,
+    200,
+  );
+});
+
 test("per-problem conversations are encrypted, private, CAS protected and retain deletion revisions", async () => {
   const turn = {
     id: "test-turn-1",
@@ -347,6 +384,8 @@ test("per-problem conversations are encrypted, private, CAS protected and retain
   assert.notEqual(ciphertext, second);
   const failed = {
     ...turn,
+    keyNumber: 2,
+    retryError: "API 키 1\nHTTP 429\nfirst error",
     status: "error",
     answer: "partial",
     error:

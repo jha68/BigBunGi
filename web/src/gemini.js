@@ -20,9 +20,12 @@ export class GeminiError extends Error {
   }
 }
 
-function redact(value, key) {
-  return key ? value.split(key).join("[API_KEY_REDACTED]") : value;
+export function redactSecrets(value, keys) {
+  return [...new Set([keys].flat().filter(Boolean))]
+    .sort((a, b) => b.length - a.length)
+    .reduce((text, key) => text.split(key).join("[API_KEY_REDACTED]"), value);
 }
+const redact = redactSecrets;
 
 export function makeContext(problem, code, result, includeExecution = true) {
   if (!problem?.id) throw new GeminiError("문제를 먼저 선택해 주세요.");
@@ -231,17 +234,20 @@ async function readGeminiStream(response, apiKey, onText) {
   const publish = (final = false) => {
     let visible = redact(text, apiKey);
     // Hold a possible partial API key until it can be redacted across frames.
-    if (!final && apiKey)
-      for (
-        let size = Math.min(apiKey.length - 1, visible.length);
-        size > 0;
-        size--
-      ) {
-        if (visible.endsWith(apiKey.slice(0, size))) {
-          visible = visible.slice(0, -size);
-          break;
-        }
-      }
+    if (!final) {
+      let held = 0;
+      for (const key of [apiKey].flat().filter(Boolean))
+        for (
+          let size = Math.min(key.length - 1, visible.length);
+          size > held;
+          size--
+        )
+          if (visible.endsWith(key.slice(0, size))) {
+            held = size;
+            break;
+          }
+      if (held) visible = visible.slice(0, -held);
+    }
     if (visible !== displayed) {
       displayed = visible;
       onText(visible);
@@ -318,13 +324,24 @@ async function readGeminiStream(response, apiKey, onText) {
 }
 
 export async function askGemini(
-  { apiKey, model, context, question, history, signal, task = "chat", onText },
+  {
+    apiKey,
+    model,
+    context,
+    question,
+    history,
+    signal,
+    task = "chat",
+    onText,
+    redactionKeys = [],
+  },
   fetcher = fetch,
 ) {
   if (!apiKey) throw new GeminiError("API 키를 먼저 연결해 주세요.");
   if (!/^models\/gemini-[a-zA-Z0-9._-]+$/.test(model))
     throw new GeminiError("사용할 Gemini 모델을 선택해 주세요.");
   const streaming = typeof onText === "function";
+  const secrets = [apiKey, ...redactionKeys];
   const response = await fetcher(
     `${API}/${model}:${streaming ? "streamGenerateContent?alt=sse" : "generateContent"}`,
     {
@@ -332,8 +349,8 @@ export async function askGemini(
       headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
       body: JSON.stringify(
         task === "notes"
-          ? makeNoteRequest({ context, history, apiKey })
-          : makeRequest({ context, question, history, apiKey }),
+          ? makeNoteRequest({ context, history, apiKey: secrets })
+          : makeRequest({ context, question, history, apiKey: secrets }),
       ),
       signal,
       credentials: "omit",
@@ -346,8 +363,8 @@ export async function askGemini(
     response.ok &&
     !response.headers.get("content-type")?.includes("application/json")
   )
-    return readGeminiStream(response, apiKey, onText);
-  const body = await readResponse(response, apiKey);
+    return readGeminiStream(response, secrets, onText);
+  const body = await readResponse(response, secrets);
   const candidate = body?.candidates?.[0];
   const text = candidate?.content?.parts
     ?.filter((part) => !part.thought && typeof part.text === "string")
@@ -361,9 +378,9 @@ export async function askGemini(
         candidate.finishReason,
       ))
   )
-    throw apiResponseError(JSON.stringify(body, null, 2), apiKey, response);
+    throw apiResponseError(JSON.stringify(body, null, 2), secrets, response);
   return {
-    text: redact(text, apiKey),
+    text: redact(text, secrets),
     truncated: candidate.finishReason === "MAX_TOKENS",
   };
 }

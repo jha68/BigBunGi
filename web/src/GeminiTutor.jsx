@@ -33,7 +33,8 @@ import {
   affordableModels,
   freeTierLabel,
 } from "./model-pricing.js";
-import { askGemini, listModels, makeContext } from "./gemini.js";
+import { askGemini, listModels, makeContext, redactSecrets } from "./gemini.js";
+import { withKeyFallback } from "./gemini-failover.js";
 import "./gemini.css";
 import { createSettingsStore } from "./gemini-settings.js";
 import { createConversationStore } from "./gemini-history.js";
@@ -72,6 +73,8 @@ export function GeminiProvider({
   const preferred = useRef(""),
     providerLive = useRef(true);
   const [keyDraft, setKeyDraft] = useState("");
+  const [backupKeyDraft, setBackupKeyDraft] = useState("");
+  const [activeKeyIndex, setActiveKeyIndex] = useState(0);
   const [connection, setConnection] = useState({ status: "idle", error: "" });
   const [models, setModels] = useState([]),
     [model, setModel] = useState("");
@@ -89,6 +92,8 @@ export function GeminiProvider({
   const [pending, setPending] = useState(null);
   const [noteGenerations, setNoteGenerations] = useState({});
   const activeKey = useRef(""),
+    configuredKeys = useRef([]),
+    activeIndex = useRef(0),
     request = useRef(null),
     connecting = useRef(null);
 
@@ -99,8 +104,11 @@ export function GeminiProvider({
       if (providerLive.current && saved.settings) {
         preferred.current = saved.settings.model;
         setKeyDraft(saved.settings.apiKey);
+        setBackupKeyDraft(saved.settings.backupApiKey || "");
         await connect({
           key: saved.settings.apiKey,
+          backupKey: saved.settings.backupApiKey || "",
+          activeKeyIndex: saved.settings.activeKeyIndex || 0,
           rememberedModel: saved.settings.model,
           persist: false,
         });
@@ -119,8 +127,11 @@ export function GeminiProvider({
         if (!live || !saved.settings) return;
         preferred.current = saved.settings.model;
         setKeyDraft(saved.settings.apiKey);
+        setBackupKeyDraft(saved.settings.backupApiKey || "");
         connect({
           key: saved.settings.apiKey,
+          backupKey: saved.settings.backupApiKey || "",
+          activeKeyIndex: saved.settings.activeKeyIndex || 0,
           rememberedModel: saved.settings.model,
           persist: false,
         });
@@ -163,32 +174,86 @@ export function GeminiProvider({
       }),
     [historyStore, registerBeforeLogout],
   );
-  function updateKey(value) {
+  function updateKey(value, index = 0) {
     activeKey.current = "";
-    setKeyDraft(value);
+    if (index === 1) setBackupKeyDraft(value);
+    else setKeyDraft(value);
     setModels([]);
     setModel("");
     setConnection({ status: "idle", error: "" });
   }
+  function saveKeys(chosenModel = preferred.current) {
+    if (configuredKeys.current[0] && chosenModel)
+      store?.save({
+        apiKey: configuredKeys.current[0],
+        backupApiKey: configuredKeys.current[1] || "",
+        activeKeyIndex: activeIndex.current,
+        model: chosenModel,
+      });
+  }
   async function connect(options = {}) {
     if (request.current || connecting.current) return;
-    const key = (options.key ?? keyDraft).trim(),
+    const keys = [
+        (options.key ?? keyDraft).trim(),
+        (options.backupKey ?? backupKeyDraft).trim(),
+      ],
       controller = new AbortController();
     connecting.current = controller;
     const timer = setTimeout(() => controller.abort(), 20000);
     setConnection({ status: "checking", error: "" });
     try {
-      const [listed, policy] = await Promise.all([
-        listModels(key, controller.signal),
+      const [outcomes, policy] = await Promise.all([
+        Promise.allSettled(
+          keys.map((key, index) =>
+            key && (index === 0 || key !== keys[0])
+              ? listModels(key, controller.signal)
+              : Promise.resolve([]),
+          ),
+        ),
         accessPromise.current,
       ]);
+      const listed = [
+        ...new Map(
+          outcomes
+            .flatMap((outcome) =>
+              outcome.status === "fulfilled" ? outcome.value : [],
+            )
+            .map((item) => [item.name, item]),
+        ).values(),
+      ];
+      if (!listed.length)
+        throw new Error(
+          redactSecrets(
+            outcomes
+              .map((outcome, index) =>
+                outcome.status === "rejected"
+                  ? `API 키 ${index + 1}\n${outcome.reason.message}`
+                  : "",
+              )
+              .filter(Boolean)
+              .join("\n\n"),
+            keys,
+          ),
+        );
       const available = affordableModels(listed, policy);
       if (!available.length)
         throw new Error(
           "무료 플랜 지원 또는 입력·출력 중 하나가 $1 미만인 사용 가능 모델이 없습니다.",
         );
       if (connecting.current !== controller) return;
-      activeKey.current = key;
+      configuredKeys.current = keys;
+      const rememberedIndex = options.activeKeyIndex || 0;
+      const usable = (index) =>
+        outcomes[index]?.status === "fulfilled" &&
+        outcomes[index].value.length > 0;
+      const index = usable(rememberedIndex)
+        ? rememberedIndex
+        : usable(0)
+          ? 0
+          : 1;
+      activeIndex.current = index;
+      activeKey.current = keys[index];
+      setActiveKeyIndex(index);
       setModels(available);
       const remembered = options.rememberedModel || preferred.current;
       const chosen =
@@ -197,8 +262,7 @@ export function GeminiProvider({
       setModel(chosen);
       preferred.current = chosen;
       setConnection({ status: "ready", error: "" });
-      if (options.persist !== false)
-        store?.save({ apiKey: key, model: chosen });
+      if (options.persist !== false) saveKeys(chosen);
       if (remembered && chosen !== remembered)
         setPersistence((current) => ({
           ...current,
@@ -225,7 +289,11 @@ export function GeminiProvider({
     connecting.current?.abort();
     connecting.current = null;
     activeKey.current = "";
+    configuredKeys.current = [];
+    activeIndex.current = 0;
+    setActiveKeyIndex(0);
     setKeyDraft("");
+    setBackupKeyDraft("");
     setModel("");
     preferred.current = "";
     setModels([]);
@@ -235,16 +303,31 @@ export function GeminiProvider({
   function chooseModel(value) {
     setModel(value);
     preferred.current = value;
-    if (activeKey.current)
-      store?.save({ apiKey: activeKey.current, model: value });
+    if (activeKey.current) saveKeys(value);
+  }
+  async function requestWithKeys(params, onAttempt) {
+    const keys = configuredKeys.current.slice();
+    const response = await withKeyFallback({
+      keys,
+      activeIndex: activeIndex.current,
+      signal: params.signal,
+      onAttempt,
+      run: (key, index, signal) =>
+        askGemini({ ...params, apiKey: key, signal, redactionKeys: keys }),
+    });
+    if (providerLive.current && activeIndex.current !== response.index) {
+      activeIndex.current = response.index;
+      activeKey.current = keys[response.index];
+      setActiveKeyIndex(response.index);
+      saveKeys(params.model);
+    }
+    return response.result;
   }
   function updateTurn(pid, id, change) {
     const safe = { ...change };
-    for (const field of ["question", "answer", "error"])
-      if (typeof safe[field] === "string" && activeKey.current)
-        safe[field] = safe[field]
-          .split(activeKey.current)
-          .join("[API_KEY_REDACTED]");
+    for (const field of ["question", "answer", "error", "retryError"])
+      if (typeof safe[field] === "string")
+        safe[field] = redactSecrets(safe[field], configuredKeys.current);
     historyStore.update(
       pid,
       (current) =>
@@ -282,9 +365,7 @@ export function GeminiProvider({
     );
     const turn = {
       id,
-      question: activeKey.current
-        ? question.trim().split(activeKey.current).join("[API_KEY_REDACTED]")
-        : question.trim(),
+      question: redactSecrets(question.trim(), configuredKeys.current),
       status: "pending",
       answer: "",
       error: "",
@@ -300,21 +381,30 @@ export function GeminiProvider({
     }
     request.current = controller;
     setPending({ pid, id });
-    let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      controller.abort();
-    }, 90000);
     try {
-      const response = await askGemini({
-        apiKey: activeKey.current,
-        model,
-        context,
-        question,
-        history,
-        signal: controller.signal,
-        onText: (text) => updateTurn(pid, id, { answer: text }),
-      });
+      const response = await requestWithKeys(
+        {
+          model,
+          context,
+          question,
+          history,
+          signal: controller.signal,
+          onText: (text) => updateTurn(pid, id, { answer: text }),
+        },
+        ({ index, previousError }) => {
+          updateTurn(pid, id, {
+            answer: "",
+            keyNumber: index + 1,
+            retryError: previousError,
+          });
+          setPending({
+            pid,
+            id,
+            keyNumber: index + 1,
+            retrying: !!previousError,
+          });
+        },
+      );
       updateTurn(pid, id, {
         answer: response.text,
         truncated: response.truncated,
@@ -323,15 +413,12 @@ export function GeminiProvider({
     } catch (error) {
       const message =
         error.name === "AbortError"
-          ? timedOut
-            ? "응답 시간이 초과됐습니다. 잠시 후 다시 시도해 주세요."
-            : "응답 생성을 중지했습니다."
+          ? "응답 생성을 중지했습니다."
           : error instanceof TypeError
             ? `${error.name}: ${error.message}`
             : error.message;
       updateTurn(pid, id, { error: message, status: "error" });
     } finally {
-      clearTimeout(timer);
       if (request.current === controller) {
         request.current = null;
         setPending(null);
@@ -351,19 +438,24 @@ export function GeminiProvider({
     request.current = controller;
     setPending({ pid, kind: "note" });
     update({ status: "pending", error: "" });
-    let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      controller.abort();
-    }, 90000);
     try {
-      const response = await askGemini({
-        apiKey: activeKey.current,
-        model,
-        task: "notes",
-        history: turns[pid] || [],
-        signal: controller.signal,
-      });
+      const response = await requestWithKeys(
+        {
+          model,
+          task: "notes",
+          history: turns[pid] || [],
+          signal: controller.signal,
+        },
+        ({ index, previousError }) => {
+          update({ keyNumber: index + 1, retryError: previousError });
+          setPending({
+            pid,
+            kind: "note",
+            keyNumber: index + 1,
+            retrying: !!previousError,
+          });
+        },
+      );
       update({
         status: "complete",
         text: response.text,
@@ -375,15 +467,12 @@ export function GeminiProvider({
         status: "error",
         error:
           error.name === "AbortError"
-            ? timedOut
-              ? "노트 생성 시간이 초과됐습니다. 다시 시도해 주세요."
-              : "노트 생성을 중지했습니다."
+            ? "노트 생성을 중지했습니다."
             : error instanceof TypeError
               ? `${error.name}: ${error.message}`
               : error.message,
       });
     } finally {
-      clearTimeout(timer);
       if (request.current === controller) {
         request.current = null;
         setPending(null);
@@ -395,6 +484,8 @@ export function GeminiProvider({
       value={{
         access,
         keyDraft,
+        backupKeyDraft,
+        activeKeyIndex,
         updateKey,
         connection,
         models,
@@ -494,6 +585,15 @@ export function GeminiNoteGenerator({
         <p className="gemini-form-error gemini-api-error" role="alert">
           {generation.error}
         </p>
+      )}
+      {generation?.retryError && generation.status !== "error" && (
+        <details className="gemini-key-retry">
+          <summary>
+            {generation.keyNumber}번 API 키로 재시도
+            {generating ? " 중…" : "했습니다."}
+          </summary>
+          <pre>{generation.retryError}</pre>
+        </details>
       )}
       {generation?.text && (
         <div className="note-ai-preview">
@@ -657,7 +757,7 @@ export function GeminiTutor({
       {showSettings && (
         <div className="gemini-settings">
           <label htmlFor="gemini-key">
-            내 Gemini API 키{" "}
+            내 Gemini API 키 1{" "}
             <a
               href="https://aistudio.google.com/apikey"
               target="_blank"
@@ -691,6 +791,30 @@ export function GeminiTutor({
               {checking ? "확인 중" : ready ? "다시 연결" : "키 연결"}
             </button>
           </div>
+          <label htmlFor="gemini-backup-key">Gemini API 키 2 (선택)</label>
+          <div className="gemini-key-row">
+            <KeyRound size={14} />
+            <input
+              id="gemini-backup-key"
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="실패 시 재시도할 보조 API 키"
+              value={tutor.backupKeyDraft}
+              disabled={checking || busy}
+              onChange={(event) => tutor.updateKey(event.target.value, 1)}
+            />
+          </div>
+          <small>
+            키를 입력·수정한 뒤 키 연결을 누르세요. 요청 실패 시 다른 키로 한 번
+            재시도합니다. 같은 프로젝트의 키는 할당량을 공유할 수 있습니다.
+          </small>
+          {ready && (
+            <p className="gemini-active-key">
+              현재 {tutor.activeKeyIndex + 1}번 API 키 사용 · 성공한 키로 다음
+              요청을 시작합니다.
+            </p>
+          )}
           {ready && (
             <>
               <div className="gemini-model-row">
@@ -881,11 +1005,19 @@ export function GeminiTutor({
                 {turn.status === "pending" && (
                   <span>
                     <Loader2 size={11} className="spin" />
-                    답변 작성 중…
+                    {tutor.pending?.id === turn.id && tutor.pending.retrying
+                      ? `${tutor.pending.keyNumber}번 키로 재시도 중…`
+                      : "답변 작성 중…"}
                   </span>
                 )}
               </span>
               {turn.answer && <Answer text={turn.answer} />}
+              {turn.retryError && turn.status === "complete" && (
+                <details className="gemini-key-retry">
+                  <summary>{turn.keyNumber}번 API 키로 재시도했습니다.</summary>
+                  <pre>{turn.retryError}</pre>
+                </details>
+              )}
               {turn.truncated && (
                 <p className="gemini-limit">
                   답변 길이 제한에 도달했습니다. 이어서 설명해 달라고 질문해

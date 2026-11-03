@@ -3,7 +3,12 @@ import assert from "node:assert/strict";
 import { createSettingsStore } from "../src/gemini-settings.js";
 
 test("saved key/model load once and rapid model edits serialize with the newest choice preserved", async () => {
-  const original = { apiKey: "test-key", model: "models/gemini-a" };
+  const original = {
+    apiKey: "test-key",
+    backupApiKey: "test-backup-key",
+    activeKeyIndex: 1,
+    model: "models/gemini-a",
+  };
   const events = [],
     writes = [];
   let release,
@@ -33,6 +38,8 @@ test("saved key/model load once and rapid model edits serialize with the newest 
     [7, 8],
   );
   assert.equal(writes.at(-1).settings.model, "models/gemini-d");
+  assert.equal(writes.at(-1).settings.backupApiKey, original.backupApiKey);
+  assert.equal(writes.at(-1).settings.activeKeyIndex, 1);
   await store.save(null);
   assert.equal(writes.at(-1).settings, null);
   assert.equal(events.at(-1).state, "empty");

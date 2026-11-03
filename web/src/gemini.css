@@ -624,6 +624,25 @@
   max-height: 360px;
   overflow-y: auto;
 }
+.gemini-key-retry {
+  margin-top: 8px;
+  font-size: 10px;
+  color: #866949;
+}
+.gemini-key-retry summary {
+  cursor: pointer;
+}
+.gemini-key-retry pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 300px;
+  overflow-y: auto;
+  background: #fff8ed;
+  border: 1px solid #eddfc7;
+  border-radius: 5px;
+  padding: 9px;
+  font-size: 10px;
+}
 @media (max-width: 720px) {
   .panel-tabs {
     gap: 16px;

@@ -167,3 +167,31 @@ test("complete keys with overlapping prefix and suffix are masked before partial
   assert.equal(result.text, "answer: [API_KEY_REDACTED]");
   assert.deepEqual(seen, ["answer: [API_KEY_REDACTED]"]);
 });
+
+test("both configured keys are masked in outbound context and across streamed frames", async () => {
+  const backup = "backup-secret-value",
+    seen = [];
+  let payload;
+  const result = await askGemini(
+    {
+      ...params,
+      question: `${params.apiKey} ${backup}`,
+      redactionKeys: [backup],
+      onText: (text) => seen.push(text),
+    },
+    async (_, options) => {
+      payload = options.body;
+      return new Response(
+        frame("keys: test-only-secret-key backup-sec") +
+          frame("ret-value", "STOP"),
+      );
+    },
+  );
+  assert.ok(!payload.includes(params.apiKey) && !payload.includes(backup));
+  assert.equal(result.text, "keys: [API_KEY_REDACTED] [API_KEY_REDACTED]");
+  assert.ok(
+    seen.every(
+      (text) => !text.includes("backup-sec") && !text.includes(params.apiKey),
+    ),
+  );
+});

@@ -81,9 +81,18 @@ function validSettings(settings) {
     (settings &&
       typeof settings === "object" &&
       !Array.isArray(settings) &&
-      Object.keys(settings).every((key) => ["apiKey", "model"].includes(key)) &&
+      Object.keys(settings).every((key) =>
+        ["apiKey", "backupApiKey", "activeKeyIndex", "model"].includes(key),
+      ) &&
       typeof settings.apiKey === "string" &&
       /^[\x21-\x7e]{1,512}$/.test(settings.apiKey) &&
+      (settings.backupApiKey === undefined ||
+        settings.backupApiKey === "" ||
+        (typeof settings.backupApiKey === "string" &&
+          /^[\x21-\x7e]{1,512}$/.test(settings.backupApiKey))) &&
+      (settings.activeKeyIndex === undefined ||
+        settings.activeKeyIndex === 0 ||
+        (settings.activeKeyIndex === 1 && !!settings.backupApiKey)) &&
       typeof settings.model === "string" &&
       /^models\/gemini-[a-zA-Z0-9._-]{1,180}$/.test(settings.model))
   );
@@ -108,6 +117,8 @@ export function validConversation(turns) {
             "withExecution",
             "at",
             "truncated",
+            "keyNumber",
+            "retryError",
           ].includes(key),
       )
     )
@@ -125,6 +136,8 @@ export function validConversation(turns) {
       typeof turn.answer === "string" &&
       turn.answer.length <= 60000 &&
       typeof turn.error === "string" &&
+      (turn.keyNumber === undefined || [1, 2].includes(turn.keyNumber)) &&
+      (turn.retryError === undefined || typeof turn.retryError === "string") &&
       ["pending", "complete", "error"].includes(turn.status) &&
       typeof turn.model === "string" &&
       /^models\/gemini-[a-zA-Z0-9._-]{1,180}$/.test(turn.model) &&
