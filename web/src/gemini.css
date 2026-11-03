@@ -10,12 +10,12 @@
 }
 .ai-tab-shortcut {
   margin-left: 4px;
-  padding: 2px 4px;
-  border: 1px solid currentColor;
-  border-radius: 4px;
   font: inherit;
-  font-size: 10px;
+  font-size: 9px;
   white-space: nowrap;
+}
+.problem-body:focus {
+  outline: none;
 }
 .panel-tabs .gemini-tab.active {
   color: #7564bd;

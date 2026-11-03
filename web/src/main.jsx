@@ -817,7 +817,9 @@ function App({ initialState = initial, onStateChange, syncControls }) {
                   >
                     <Sparkles size={14} />
                     AI 질문
-                    <kbd className="ai-tab-shortcut" aria-hidden="true">Alt + Q</kbd>
+                    <small className="ai-tab-shortcut" aria-hidden="true">
+                      Alt + Q로 탭 전환
+                    </small>
                   </button>
                   {solutions[selected] && (
                     <button

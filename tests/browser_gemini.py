@@ -96,7 +96,7 @@ async def main():
         editor = page.get_by_role("textbox", name="Python 코드 편집기", exact=True)
 
         ai_tab = page.get_by_role("tab", name="AI 질문", exact=True)
-        assert await ai_tab.locator("kbd").inner_text() == "Alt + Q"
+        assert await ai_tab.locator(".ai-tab-shortcut").inner_text() == "Alt + Q로 탭 전환"
         await editor.click()
         await page.keyboard.press("Alt+q")
         question_input = page.get_by_role("textbox", name="Gemini에게 질문", exact=True)
@@ -107,6 +107,8 @@ async def main():
         await page.keyboard.press("Alt+q")
         assert await page.get_by_role("tab", name="문제", exact=True).get_attribute("aria-selected") == "true"
         assert await page.locator(".problem-body").evaluate("el => el === document.activeElement")
+        assert await page.locator(".problem-body").evaluate("el => getComputedStyle(el).outlineStyle") == "none"
+        await page.screenshot(path="/tmp/bigbungi-shortcut-no-outline.png", full_page=True)
         assert await page.locator(".problem-panel.gemini-expanded").count() == 0
         await page.keyboard.press("Alt+q")
         assert await question_input.input_value() == "단축키로 작성한 질문 초안"
