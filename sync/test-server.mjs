@@ -14,6 +14,7 @@ const mf = new Miniflare({
   d1Databases: ["DB"],
   bindings: {
     APP_ORIGIN: "https://bigbungi.junununseo.com",
+    HISTORY_KEY: "1".repeat(64),
     PASSWORD_HASH: `pbkdf2-100000:${salt}:${pbkdf2Sync(password, Buffer.from(salt, "hex"), 100000, 32, "sha256").toString("hex")}`,
   },
 });

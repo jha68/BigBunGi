@@ -72,6 +72,13 @@ export default function SyncGate({
     (path, method, data) => syncRequest(apiUrl, path, method, data),
     [apiUrl],
   );
+  const beforeLogout = useRef(null);
+  const registerBeforeLogout = useCallback((handler) => {
+    beforeLogout.current = handler;
+    return () => {
+      if (beforeLogout.current === handler) beforeLogout.current = null;
+    };
+  }, []);
 
   function activate(state, remote) {
     revision.current = remote.revision;
@@ -210,6 +217,12 @@ export default function SyncGate({
   }
   async function logout() {
     if (saving.current) return;
+    if (beforeLogout.current && !(await beforeLogout.current())) {
+      setError(
+        "AI 대화 저장이 완료되지 않았습니다. AI 질문에서 저장 상태를 확인해 주세요.",
+      );
+      return;
+    }
     if (
       !(await flushRef.current()) ||
       !sameState(snapshot.current, baseline.current)
@@ -254,6 +267,7 @@ export default function SyncGate({
       <>
         {children(restored, changed, {
           settingsApi: api,
+          registerBeforeLogout,
           status,
           error,
           retry: () => {

@@ -39,10 +39,15 @@ import {
 import { askGemini, listModels, makeContext } from "./gemini.js";
 import "./gemini.css";
 import { createSettingsStore } from "./gemini-settings.js";
+import { createConversationStore } from "./gemini-history.js";
 
 const TutorContext = createContext(null);
 
-export function GeminiProvider({ children, settingsApi }) {
+export function GeminiProvider({
+  children,
+  settingsApi,
+  registerBeforeLogout,
+}) {
   const [access, setAccess] = useState(null);
   const accessPromise = useRef(null);
   useEffect(() => {
@@ -75,6 +80,15 @@ export function GeminiProvider({ children, settingsApi }) {
     [model, setModel] = useState("");
   const [turns, setTurns] = useState({}),
     [drafts, setDrafts] = useState({});
+  const [conversationStates, setConversationStates] = useState({});
+  const historyStore = useMemo(
+    () =>
+      createConversationStore(settingsApi, (pid, record) => {
+        setTurns((previous) => ({ ...previous, [pid]: record.turns }));
+        setConversationStates((previous) => ({ ...previous, [pid]: record }));
+      }),
+    [settingsApi],
+  );
   const [pending, setPending] = useState(null);
   const [noteGenerations, setNoteGenerations] = useState({});
   const activeKey = useRef(""),
@@ -130,6 +144,28 @@ export function GeminiProvider({ children, settingsApi }) {
       connecting.current = null;
     };
   }, []);
+  useEffect(() => {
+    historyStore.start();
+    const warn = (event) => {
+      if (historyStore.hasUnsaved()) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => {
+      window.removeEventListener("beforeunload", warn);
+      historyStore.stop();
+    };
+  }, [historyStore]);
+  useEffect(
+    () =>
+      registerBeforeLogout?.(async () => {
+        request.current?.abort();
+        return historyStore.flushAll();
+      }),
+    [historyStore, registerBeforeLogout],
+  );
   function updateKey(value) {
     activeKey.current = "";
     setKeyDraft(value);
@@ -206,12 +242,18 @@ export function GeminiProvider({ children, settingsApi }) {
       store?.save({ apiKey: activeKey.current, model: value });
   }
   function updateTurn(pid, id, change) {
-    setTurns((previous) => ({
-      ...previous,
-      [pid]: (previous[pid] || []).map((turn) =>
-        turn.id === id ? { ...turn, ...change } : turn,
-      ),
-    }));
+    const safe = { ...change };
+    for (const field of ["question", "answer", "error"])
+      if (typeof safe[field] === "string" && activeKey.current)
+        safe[field] = safe[field]
+          .split(activeKey.current)
+          .join("[API_KEY_REDACTED]");
+    historyStore.update(
+      pid,
+      (current) =>
+        current.map((turn) => (turn.id === id ? { ...turn, ...safe } : turn)),
+      !!safe.status,
+    );
   }
   async function send({
     problem,
@@ -222,6 +264,8 @@ export function GeminiProvider({ children, settingsApi }) {
     retryId,
   }) {
     if (request.current || connection.status !== "ready") return;
+    if (!historyStore.ready(problem.id))
+      return "AI 대화 저장·복원이 완료된 뒤 다시 보내 주세요.";
     let context;
     try {
       context = makeContext(problem, code, result, includeExecution);
@@ -241,7 +285,9 @@ export function GeminiProvider({ children, settingsApi }) {
     );
     const turn = {
       id,
-      question: question.trim(),
+      question: activeKey.current
+        ? question.trim().split(activeKey.current).join("[API_KEY_REDACTED]")
+        : question.trim(),
       status: "pending",
       answer: "",
       error: "",
@@ -252,10 +298,7 @@ export function GeminiProvider({ children, settingsApi }) {
     };
     if (retryId) updateTurn(pid, id, turn);
     else {
-      setTurns((previous) => ({
-        ...previous,
-        [pid]: [...(previous[pid] || []), turn],
-      }));
+      historyStore.update(pid, (current) => [...current, turn], true);
       setDrafts((previous) => ({ ...previous, [pid]: "" }));
     }
     request.current = controller;
@@ -300,6 +343,7 @@ export function GeminiProvider({ children, settingsApi }) {
   }
   async function generateNote({ problem, code, result }) {
     if (request.current || connection.status !== "ready") return;
+    if (!historyStore.ready(problem.id)) return;
     const pid = problem.id;
     const controller = new AbortController();
     const update = (change) =>
@@ -366,6 +410,8 @@ export function GeminiProvider({ children, settingsApi }) {
         retrySettings: () =>
           store?.hasIntent ? store.retry() : restoreSettings(),
         turns,
+        historyStore,
+        conversationStates,
         drafts,
         setDrafts,
         pending,
@@ -375,7 +421,10 @@ export function GeminiProvider({ children, settingsApi }) {
         clearNote: (pid) =>
           setNoteGenerations((previous) => ({ ...previous, [pid]: null })),
         cancel: () => request.current?.abort(),
-        clear: (pid) => setTurns((previous) => ({ ...previous, [pid]: [] })),
+        clear: (pid) => {
+          historyStore.update(pid, () => [], true);
+          if (!historyStore.ready(pid)) historyStore.retry(pid);
+        },
       }}
     >
       {children}
@@ -452,7 +501,9 @@ export function GeminiNoteGenerator({
         </strong>
         <button
           className="note-ai-generate"
-          disabled={!ready || !count || busy}
+          disabled={
+            !ready || !count || busy || !tutor.historyStore.ready(problem.id)
+          }
           onClick={() => tutor.generateNote({ problem, code, result })}
         >
           {generating ? (
@@ -543,10 +594,17 @@ export function GeminiTutor({
     draft = tutor.drafts[problem.id] || "";
   const ready = tutor.connection.status === "ready",
     showSettings = settingsOpen || !ready;
+  const conversation = tutor.conversationStates[problem.id] || {
+    state: "loading",
+  };
+  const historyReady = tutor.historyStore.ready(problem.id);
   const checking =
       tutor.connection.status === "checking" ||
       tutor.persistence.state === "loading",
     busy = !!tutor.pending;
+  useEffect(() => {
+    tutor.historyStore.load(problem.id);
+  }, [problem.id, tutor.historyStore]);
   useEffect(() => {
     if (!hidden && messages.current)
       messages.current.scrollTop = messages.current.scrollHeight;
@@ -748,7 +806,7 @@ export function GeminiTutor({
           <p>
             <ShieldCheck size={12} />
             {tutor.settingsEnabled
-              ? "키·모델은 로그인 계정에 암호화해 저장하고 자동 복원합니다. AI 대화는 새로고침하면 지워집니다."
+              ? "키·모델과 문제별 AI 대화를 계정에 암호화해 저장하고 자동 복원합니다."
               : "키·AI 대화는 이 탭에서만 유지하며 새로고침하면 지워집니다."}
             <br />
             입력한 키의 할당량·요금 정책이 적용됩니다.
@@ -906,6 +964,72 @@ export function GeminiTutor({
           submit();
         }}
       >
+        {tutor.settingsEnabled && (
+          <div
+            className={`gemini-history-status ${conversation.state}`}
+            role="status"
+          >
+            <span>
+              {
+                {
+                  loading: "AI 대화 불러오는 중…",
+                  saving: "AI 대화 저장 중…",
+                  saved: "AI 대화 저장됨",
+                  error: "AI 대화 저장·복원 실패",
+                  conflict: "다른 기기와 AI 대화 충돌",
+                }[conversation.state]
+              }
+            </span>
+            {conversation.error && (
+              <span className="gemini-form-error">{conversation.error}</span>
+            )}
+            {["error", "conflict"].includes(conversation.state) && (
+              <>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => tutor.historyStore.retry(problem.id)}
+                >
+                  {conversation.state === "conflict"
+                    ? "현재 변경 다시 저장"
+                    : "대화 저장·복원 재시도"}
+                </button>
+                {conversation.state === "conflict" && (
+                  <small>
+                    다른 기기의 새 대화와 현재 변경을 합칩니다. 대화 지우기를
+                    눌렀다면 삭제를 다시 적용합니다.
+                  </small>
+                )}
+                {!!currentTurns.length && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const url = URL.createObjectURL(
+                        new Blob(
+                          [
+                            JSON.stringify(
+                              { problem: problem.id, turns: currentTurns },
+                              null,
+                              2,
+                            ),
+                          ],
+                          { type: "application/json" },
+                        ),
+                      );
+                      const link = document.createElement("a");
+                      link.href = url;
+                      link.download = `${problem.id}-ai-history.json`;
+                      link.click();
+                      setTimeout(() => URL.revokeObjectURL(url), 1000);
+                    }}
+                  >
+                    현재 대화 내려받기
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        )}
         {busy && tutor.pending.kind === "note" && (
           <p className="gemini-other-pending" role="status">
             복습 노트를 생성 중입니다. 완료 후 질문하거나 생성을 중지해 주세요.
@@ -944,7 +1068,7 @@ export function GeminiTutor({
                 event.nativeEvent.keyCode !== 229
               ) {
                 event.preventDefault();
-                if (ready && !busy) submit();
+                if (ready && historyReady && !busy) submit();
               }
             }}
           />
@@ -961,7 +1085,7 @@ export function GeminiTutor({
             <button
               type="submit"
               aria-label="Gemini 질문 보내기"
-              disabled={!ready || !draft.trim()}
+              disabled={!ready || !historyReady || !draft.trim()}
             >
               <Send size={15} />
             </button>

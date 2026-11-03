@@ -1,5 +1,5 @@
 // Runs only in GitHub Actions with repository secrets; never outputs credentials.
-import { createHash, pbkdf2Sync } from "node:crypto";
+import { createHash, pbkdf2Sync, randomBytes } from "node:crypto";
 import { mkdtemp, writeFile, rm, appendFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -45,7 +45,7 @@ if (password.length < 12 || password.length > 128)
   configurationError(
     "SYNC_PASSWORD must contain 12-128 characters. Update only the SYNC_PASSWORD repository Actions secret, then rerun this workflow. Cloudflare has not been contacted.",
   );
-const api = async (path, data) => {
+const api = async (path, data, allowMissing = false) => {
   const response = await fetch(
     `https://api.cloudflare.com/client/v4/accounts/${account}${path}`,
     {
@@ -59,6 +59,7 @@ const api = async (path, data) => {
     },
   );
   const body = await response.json();
+  if (response.status === 404 && allowMissing) return [];
   if (!response.ok || !body.success)
     throw new Error(
       `Cloudflare ${path.split("?")[0]} failed (HTTP ${response.status}): ${JSON.stringify(body.errors || [])}. Check token permissions and account ID.`,
@@ -129,8 +130,27 @@ try {
     .subarray(0, 16);
   const hash = `pbkdf2-100000:${salt.toString("hex")}:${pbkdf2Sync(password, salt, 100000, 32, "sha256").toString("hex")}`;
   sensitive.push(hash);
+  // A separate stable secret keeps conversations readable when the login password
+  // changes. Wrangler preserves existing secret bindings on every deployment.
+  const bindings = await api(
+    "/workers/scripts/bigbungi-sync/secrets",
+    undefined,
+    true,
+  );
+  const secretValues = { PASSWORD_HASH: hash };
+  if (!bindings.some((binding) => binding.name === "HISTORY_KEY")) {
+    const records = await api(`/d1/database/${database.uuid}/query`, {
+      sql: "SELECT COUNT(*) AS count FROM conversations WHERE data IS NOT NULL",
+    });
+    if (records[0]?.results?.[0]?.count !== 0)
+      throw new Error(
+        "HISTORY_KEY is missing while saved conversations exist. Restore the existing Worker secret; refusing to replace the encryption key.",
+      );
+    secretValues.HISTORY_KEY = randomBytes(32).toString("hex");
+    sensitive.push(secretValues.HISTORY_KEY);
+  }
   const secrets = join(dir, "secrets.json");
-  await writeFile(secrets, JSON.stringify({ PASSWORD_HASH: hash }), {
+  await writeFile(secrets, JSON.stringify(secretValues), {
     mode: 0o600,
   });
   wrangler(["deploy", "--config", config, "--secrets-file", secrets]);
@@ -164,6 +184,15 @@ try {
         signal: AbortSignal.timeout(12000),
       });
       if (!state.ok) throw await responseFailure("Authenticated state", state);
+      const conversation = await fetch(
+        `https://${domain}/conversations/t1-01`,
+        {
+          headers: { Cookie: cookie },
+          signal: AbortSignal.timeout(12000),
+        },
+      );
+      if (!conversation.ok)
+        throw await responseFailure("Authenticated conversation", conversation);
       await fetch(`https://${domain}/logout`, {
         method: "POST",
         headers: { Cookie: cookie, Origin: "https://bigbungi.junununseo.com" },
@@ -194,7 +223,7 @@ try {
   if (process.env.GITHUB_OUTPUT)
     await appendFile(process.env.GITHUB_OUTPUT, `api_url=https://${domain}\n`);
   console.log(
-    "::notice::SYNC VERIFIED: HTTPS password login and authenticated record access at https://" +
+    "::notice::SYNC VERIFIED: HTTPS password login, record and encrypted conversation access at https://" +
       domain,
   );
 } finally {

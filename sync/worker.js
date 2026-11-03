@@ -11,7 +11,7 @@ const unhex = (str) =>
 const digest = async (text) =>
   hex(await crypto.subtle.digest("SHA-256", encoder.encode(text)));
 
-async function settingsKey(passwordHash) {
+async function settingsKey(passwordHash, purpose = "settings/owner") {
   const material = await crypto.subtle.importKey(
     "raw",
     encoder.encode(passwordHash),
@@ -24,7 +24,9 @@ async function settingsKey(passwordHash) {
       name: "HKDF",
       hash: "SHA-256",
       salt: encoder.encode("bigbungi-vault-v1"),
-      info: encoder.encode("gemini-settings/owner"),
+      info: encoder.encode(
+        purpose === "settings/owner" ? "gemini-settings/owner" : purpose,
+      ),
     },
     material,
     { name: "AES-GCM", length: 256 },
@@ -32,17 +34,28 @@ async function settingsKey(passwordHash) {
     ["encrypt", "decrypt"],
   );
 }
-const aad = encoder.encode("bigbungi/settings/owner/v1");
-export async function encryptSettings(settings, passwordHash) {
+export async function encryptSettings(
+  settings,
+  passwordHash,
+  purpose = "settings/owner",
+) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const encrypted = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv, additionalData: aad },
-    await settingsKey(passwordHash),
+    {
+      name: "AES-GCM",
+      iv,
+      additionalData: encoder.encode(`bigbungi/${purpose}/v1`),
+    },
+    await settingsKey(passwordHash, purpose),
     encoder.encode(JSON.stringify(settings)),
   );
   return JSON.stringify({ version: 1, iv: hex(iv), data: hex(encrypted) });
 }
-export async function decryptSettings(data, passwordHash) {
+export async function decryptSettings(
+  data,
+  passwordHash,
+  purpose = "settings/owner",
+) {
   const record = JSON.parse(data);
   if (
     record.version !== 1 ||
@@ -52,8 +65,12 @@ export async function decryptSettings(data, passwordHash) {
   )
     throw new Error("invalid-vault");
   const decrypted = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: unhex(record.iv), additionalData: aad },
-    await settingsKey(passwordHash),
+    {
+      name: "AES-GCM",
+      iv: unhex(record.iv),
+      additionalData: encoder.encode(`bigbungi/${purpose}/v1`),
+    },
+    await settingsKey(passwordHash, purpose),
     unhex(record.data),
   );
   return JSON.parse(new TextDecoder().decode(decrypted));
@@ -70,6 +87,56 @@ function validSettings(settings) {
       typeof settings.model === "string" &&
       /^models\/gemini-[a-zA-Z0-9._-]{1,180}$/.test(settings.model))
   );
+}
+
+export function validConversation(turns) {
+  if (!Array.isArray(turns) || turns.length > 200) return false;
+  const ids = new Set();
+  return turns.every((turn) => {
+    if (!turn || typeof turn !== "object" || Array.isArray(turn)) return false;
+    if (
+      Object.keys(turn).some(
+        (key) =>
+          ![
+            "id",
+            "question",
+            "answer",
+            "error",
+            "status",
+            "model",
+            "contextLines",
+            "withExecution",
+            "at",
+            "truncated",
+          ].includes(key),
+      )
+    )
+      return false;
+    if (
+      typeof turn.id !== "string" ||
+      !/^[a-zA-Z0-9_-]{1,120}$/.test(turn.id) ||
+      ids.has(turn.id)
+    )
+      return false;
+    ids.add(turn.id);
+    return (
+      typeof turn.question === "string" &&
+      turn.question.length <= 4000 &&
+      typeof turn.answer === "string" &&
+      turn.answer.length <= 60000 &&
+      typeof turn.error === "string" &&
+      turn.error.length <= 1500 &&
+      ["pending", "complete", "error"].includes(turn.status) &&
+      typeof turn.model === "string" &&
+      /^models\/gemini-[a-zA-Z0-9._-]{1,180}$/.test(turn.model) &&
+      Number.isSafeInteger(turn.contextLines) &&
+      turn.contextLines >= 0 &&
+      typeof turn.withExecution === "boolean" &&
+      typeof turn.at === "string" &&
+      turn.at.length <= 40 &&
+      (turn.truncated === undefined || typeof turn.truncated === "boolean")
+    );
+  });
 }
 
 async function validPassword(password, record) {
@@ -306,6 +373,79 @@ export default {
           );
         return reply({ revision: revision + 1 });
       }
+      const conversation = /^\/conversations\/(t[123]-\d{2})$/.exec(path);
+      if (conversation && ["GET", "PUT"].includes(request.method)) {
+        const pid = conversation[1];
+        if (!/^[a-f0-9]{64}$/.test(env.HISTORY_KEY || ""))
+          return reply(
+            { error: "AI 대화 저장소 설정이 완료되지 않았습니다." },
+            503,
+          );
+        if (request.method === "GET") {
+          const row = await env.DB.prepare(
+            "SELECT revision, data FROM conversations WHERE id = ?",
+          )
+            .bind(pid)
+            .first();
+          try {
+            const turns = row?.data
+              ? await decryptSettings(
+                  row.data,
+                  env.HISTORY_KEY,
+                  `conversations/${pid}`,
+                )
+              : [];
+            return reply({ revision: row?.revision || 0, turns });
+          } catch {
+            return reply(
+              {
+                error:
+                  "저장된 AI 대화를 복호화하지 못했습니다. 기존 기록은 보존됩니다.",
+              },
+              500,
+            );
+          }
+        }
+        const { revision, turns } = await readBody(request, 512 * 1024);
+        if (
+          !Number.isSafeInteger(revision) ||
+          revision < 0 ||
+          !validConversation(turns)
+        )
+          return reply(
+            {
+              error:
+                "대화는 문제당 200개, 질문 4,000자·답변 60,000자 이내여야 합니다.",
+            },
+            400,
+          );
+        const encrypted = turns.length
+          ? await encryptSettings(
+              turns,
+              env.HISTORY_KEY,
+              `conversations/${pid}`,
+            )
+          : null;
+        // Retain an empty tombstone so an older device cannot resurrect deleted history.
+        const updated =
+          revision === 0
+            ? await env.DB.prepare(
+                "INSERT INTO conversations (id, revision, data, updated_at) VALUES (?, 1, ?, ?) ON CONFLICT(id) DO NOTHING",
+              )
+                .bind(pid, encrypted, new Date().toISOString())
+                .run()
+            : await env.DB.prepare(
+                "UPDATE conversations SET revision = revision + 1, data = ?, updated_at = ? WHERE id = ? AND revision = ?",
+              )
+                .bind(encrypted, new Date().toISOString(), pid, revision)
+                .run();
+        if (updated.meta.changes !== 1)
+          return reply(
+            { error: "다른 기기에서 이 문제의 AI 대화가 변경되었습니다." },
+            409,
+          );
+        return reply({ revision: revision + 1 });
+      }
       if (path === "/state" && request.method === "GET") {
         const row = await env.DB.prepare(
           "SELECT revision, data, updated_at FROM practice WHERE id = 'owner'",
@@ -341,7 +481,11 @@ export default {
     } catch (error) {
       if (error.message === "too-large")
         return reply(
-          { error: "기록이 너무 큽니다. 1MB 이내로 줄여 주세요." },
+          {
+            error: path.startsWith("/conversations/")
+              ? "AI 대화가 512KiB를 초과했습니다. 현재 대화를 내려받은 뒤 대화를 지워 주세요."
+              : "기록이 너무 큽니다. 1MB 이내로 줄여 주세요.",
+          },
           413,
         );
       if (error instanceof SyntaxError || error.message === "bad-json")

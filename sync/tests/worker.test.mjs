@@ -34,7 +34,11 @@ before(async () => {
     compatibilityDate: "2026-07-01",
     cf: false,
     d1Databases: ["DB"],
-    bindings: { APP_ORIGIN: origin, PASSWORD_HASH: hash },
+    bindings: {
+      APP_ORIGIN: origin,
+      PASSWORD_HASH: hash,
+      HISTORY_KEY: "1".repeat(64),
+    },
   });
   db = await mf.getD1Database("DB");
   await db.exec(
@@ -227,6 +231,120 @@ test("Gemini settings are encrypted at rest, private, revision protected and iso
     settings: null,
     unreadable: false,
   });
+});
+
+test("per-problem conversations are encrypted, private, CAS protected and retain deletion revisions", async () => {
+  const turn = {
+    id: "test-turn-1",
+    question: "결측값은 어떻게 처리해?",
+    answer: "중앙값을 사용하세요.",
+    error: "",
+    status: "complete",
+    model: "models/gemini-2.5-flash",
+    contextLines: 4,
+    withExecution: true,
+    at: "2026-11-03T00:00:00Z",
+  };
+  const path = "/conversations/t1-01";
+  assert.equal((await call(path, "GET", undefined, null)).status, 401);
+  assert.deepEqual(await (await call(path)).json(), { revision: 0, turns: [] });
+  assert.equal(
+    (await call(path, "PUT", { revision: 0, turns: [turn] })).status,
+    200,
+  );
+  const ciphertext = (
+    await db
+      .prepare("SELECT data FROM conversations WHERE id = 't1-01'")
+      .first()
+  ).data;
+  assert.ok(
+    !ciphertext.includes(turn.question) && !ciphertext.includes(turn.answer),
+  );
+  const other = (await call("/login", "POST", { password }, null)).headers
+    .get("set-cookie")
+    .split(";")[0];
+  assert.deepEqual(
+    (await (await call(path, "GET", undefined, other)).json()).turns,
+    [turn],
+  );
+  assert.deepEqual(
+    (await (await call("/conversations/t1-02")).json()).turns,
+    [],
+  );
+  assert.equal(
+    (await call(path, "PUT", { revision: 0, turns: [] })).status,
+    409,
+  );
+  assert.equal(
+    (await call(path, "PUT", { revision: 1, turns: [turn, turn] })).status,
+    400,
+  );
+  assert.equal(
+    (
+      await call(path, "PUT", {
+        revision: 1,
+        turns: [{ ...turn, apiKey: "not-allowed" }],
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await call(path, "PUT", {
+        revision: 1,
+        turns: [{ ...turn, answer: "a".repeat(60001) }],
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await call(path, "PUT", {
+        revision: 1,
+        turns: Array.from({ length: 201 }, (_, i) => ({
+          ...turn,
+          id: `turn-${i}`,
+        })),
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await call(path, "PUT", { revision: 1, turns: [turn] }, cookie, {
+        Origin: "https://evil.example",
+      })
+    ).status,
+    403,
+  );
+  // Ciphertext copied to another problem fails authenticated decryption.
+  await db
+    .prepare(
+      "INSERT INTO conversations (id, revision, data) VALUES ('t1-02', 1, ?)",
+    )
+    .bind(ciphertext)
+    .run();
+  assert.equal((await call("/conversations/t1-02")).status, 500);
+  await db.prepare("DELETE FROM conversations WHERE id = 't1-02'").run();
+  assert.equal(
+    (await call(path, "PUT", { revision: 1, turns: [] })).status,
+    200,
+  );
+  assert.deepEqual(await (await call(path)).json(), { revision: 2, turns: [] });
+  assert.equal(
+    (await call(path, "PUT", { revision: 1, turns: [turn] })).status,
+    409,
+  );
+  assert.equal(
+    (await call(path, "PUT", { revision: 2, turns: [turn] })).status,
+    200,
+  );
+  const second = (
+    await db
+      .prepare("SELECT data FROM conversations WHERE id = 't1-01'")
+      .first()
+  ).data;
+  assert.notEqual(ciphertext, second);
 });
 
 test("logout invalidates sessions, expired sessions are rejected, and wrong passwords are rate limited", async () => {

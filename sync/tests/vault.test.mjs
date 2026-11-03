@@ -14,3 +14,31 @@ test("vault requires the same password-derived server secret and authenticates i
   record.iv = "0".repeat(24);
   await assert.rejects(() => decryptSettings(JSON.stringify(record), secret));
 });
+
+test("conversation encryption is bound to its problem and independent of the login password", async () => {
+  const stableHistorySecret = "a".repeat(64),
+    turns = [{ question: "test", answer: "sample" }];
+  const encrypted = await encryptSettings(
+    turns,
+    stableHistorySecret,
+    "conversations/t1-01",
+  );
+  assert.deepEqual(
+    await decryptSettings(
+      encrypted,
+      stableHistorySecret,
+      "conversations/t1-01",
+    ),
+    turns,
+  );
+  await assert.rejects(() =>
+    decryptSettings(encrypted, stableHistorySecret, "conversations/t1-02"),
+  );
+  await assert.rejects(() =>
+    decryptSettings(
+      encrypted,
+      "different-password-hash",
+      "conversations/t1-01",
+    ),
+  );
+});
