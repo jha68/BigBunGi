@@ -14,6 +14,7 @@ API = "https://bigbungi-api.junununseo.com"
 PASSWORD = "test-only-sync-password"
 GEMINI_KEY = "test-only-persisted-gemini-key"
 GEMINI_MODEL = "models/gemini-2.5-flash"
+SAVED_NOTE = "내 기존 노트\n\n```python\nfor n in [1, 2]:\n    print(n)\n```"
 STORAGE = "bigbungi.practice.v1"
 
 def local_fetch(url, method, body, headers):
@@ -83,7 +84,7 @@ async def main():
             await page.get_by_label("Gemini에게 질문", exact=True).fill(question)
             await page.get_by_label("Gemini에게 질문", exact=True).press("Enter")
             await page.wait_for_function("!document.querySelector('.gemini-stop') && document.querySelector('.gemini-input-wrap textarea').value === ''")
-        seed = {"drafts": {"t1-01": "print('import me')"}, "notes": {"t1-01": "내 기존 노트"}, "answers": {"t1-01": {"result": "42"}}, "progress": {"t1-01": {"passed": True}}, "selected": "t1-01"}
+        seed = {"drafts": {"t1-01": "print('import me')"}, "notes": {"t1-01": SAVED_NOTE}, "answers": {"t1-01": {"result": "42"}}, "progress": {"t1-01": {"passed": True}}, "selected": "t1-01"}
         a = await context(seed); page = await a.new_page(); await page.goto(ORIGIN)
         assert await page.locator(".coding-panel").count() == 0
         await login(page, "wrong")
@@ -151,7 +152,11 @@ async def main():
         assert "DEVICE_ONE" in await other.get_by_role("textbox", name="Python 코드 편집기", exact=True).inner_text()
         assert await other.locator(".question-link .solved-icon").count() == 1
         await other.get_by_role("tab", name="노트", exact=True).click()
-        assert await other.get_by_role("textbox", name="풀이 노트", exact=True).input_value() == "내 기존 노트"
+        assert "내 기존 노트" in await other.get_by_role("region", name="저장된 풀이 노트", exact=True).inner_text()
+        restored_code = other.get_by_role("region", name="저장된 풀이 노트", exact=True).get_by_role("textbox", name="Python 코드 예시", exact=True)
+        assert await restored_code.evaluate("e => Array.from(e.querySelectorAll('.cm-line')).map(line => line.textContent).join('\\n')") == "for n in [1, 2]:\n    print(n)"
+        await other.get_by_role("button", name="노트 편집", exact=True).click()
+        assert await other.get_by_role("textbox", name="풀이 노트", exact=True).input_value() == SAVED_NOTE
         assert "42" in await other.evaluate(f"localStorage.getItem('{STORAGE}')")
         await edit(other, 'print("DEVICE_TWO")'); await saved(other)
         print("PASS: password gate, existing records imported, code/answers/notes/progress restored on another device.", flush=True)

@@ -10,6 +10,7 @@ from playwright.async_api import async_playwright, Error as PlaywrightError
 from browser_smoke import verified_download
 
 KEY = "test-only-gemini-key-not-real"
+NOTE_CODE = "for value in [1, 2]:\n    print('Gemini 코드 예시', value)"
 
 
 async def main():
@@ -56,7 +57,7 @@ async def main():
                         status, body = 429, {"error": {"message": "quota exceeded"}}
                     else:
                         await note_release.wait()
-                        body = {"candidates": [{"content": {"parts": [{"text": "Q. 오류 원인은?\nA. 출력 예시를 확인하세요.\n\n```python\nprint('Gemini 코드 예시')\n```"}]}, "finishReason": "STOP"}]}
+                        body = {"candidates": [{"content": {"parts": [{"text": "Q. 오류 원인은?\nA. 출력 예시를 확인하세요.\n\n```python\n" + NOTE_CODE + "\n```"}]}, "finishReason": "STOP"}]}
                 elif "할당량 테스트" in question and not quota_once:
                     quota_once = True
                     status, body = 429, {"error": {"message": "quota exceeded"}}
@@ -88,6 +89,23 @@ async def main():
 
         async def edit(source):
             await editor.click(); await editor.press("Control+a"); await page.keyboard.insert_text(source)
+
+        async def note_editor():
+            toggle = page.get_by_role("button", name="노트 편집", exact=True)
+            if await toggle.is_visible():
+                await toggle.click()
+            return page.get_by_role("textbox", name="풀이 노트", exact=True)
+
+        async def check_saved_code():
+            saved = page.get_by_role("region", name="저장된 풀이 노트", exact=True)
+            assert await saved.is_visible()
+            code = saved.get_by_role("textbox", name="Python 코드 예시", exact=True)
+            assert await code.get_attribute("contenteditable") == "false"
+            rendered = await code.evaluate("e => Array.from(e.querySelectorAll('.cm-line')).map(line => line.textContent).join('\\n')")
+            assert rendered == NOTE_CODE, repr(rendered)
+            assert "```" not in await saved.inner_text()
+            colors = await code.locator(".cm-line span").evaluate_all("nodes => [...new Set(nodes.map(node => getComputedStyle(node).color))]")
+            assert len(colors) >= 2, colors
 
         source = 'print("CONTEXT_STDOUT")\nraise ValueError("CONTEXT_ERROR")'
         await edit(source)
@@ -147,7 +165,7 @@ async def main():
         assert "CONTEXT_STDOUT" in snapshot["lastExecution"]["stdout"]
         assert snapshot["lastExecution"]["matchesCurrentCode"] is True
         assert KEY not in json.dumps(payload)
-        assert await page.get_by_role("textbox", name="Gemini Python 예시").get_attribute("contenteditable") == "false"
+        assert await page.get_by_role("textbox", name="Python 코드 예시").get_attribute("contenteditable") == "false"
         assert not await page.evaluate("window.__gemini_xss || false")
         assert not await page.locator('.gemini-markdown a[href^="javascript:"]').count()
         await page.screenshot(path="/tmp/bigbungi-gemini.png", full_page=True)
@@ -226,7 +244,7 @@ async def main():
         await page.locator(".question-link").nth(0).click()
         await page.get_by_role("tab", name="노트", exact=True).click()
         await page.wait_for_selector(".note-ai-preview")
-        assert await page.get_by_role("textbox", name="Gemini Python 예시", exact=True).get_attribute("contenteditable") == "false"
+        assert await page.get_by_role("textbox", name="Python 코드 예시", exact=True).get_attribute("contenteditable") == "false"
         sent_note = [r for r in requests if r["body"]][-1]
         assert sent_note["url"].endswith("models/gemini-2.5-pro:generateContent")
         assert sent_note["key"] == KEY
@@ -235,13 +253,18 @@ async def main():
         assert list(note_data) == ["conversations"]
         assert "두 번째 문제 힌트" not in json.dumps(note_data,ensure_ascii=False)
         await page.get_by_role("button", name="내 노트에 추가", exact=True).click()
-        note = await page.get_by_role("textbox", name="풀이 노트", exact=True).input_value()
+        await check_saved_code()
+        note = await (await note_editor()).input_value()
         assert note.startswith("생성 중 수정한 메모\n\nQ. 오류 원인은?")
-        assert "```python\nprint('Gemini 코드 예시')\n```" in note
+        assert "```python\n" + NOTE_CODE + "\n```" in note
+        note += "\n\n직접 추가한 메모"
+        await (await note_editor()).fill(note)
+        await page.get_by_role("button", name="노트 보기", exact=True).click()
+        await check_saved_code()
         assert not await page.locator(".note-ai-preview").count()
         await page.locator(".question-link").nth(1).click()
         await page.get_by_role("tab", name="노트", exact=True).click()
-        assert await page.get_by_role("textbox", name="풀이 노트", exact=True).input_value() == "두 번째 문제 메모"
+        assert await (await note_editor()).input_value() == "두 번째 문제 메모"
         await page.locator(".question-link").nth(0).click()
         await page.get_by_role("tab", name="AI 질문", exact=True).click()
         assert await page.locator(".gemini-turn").count() == 2
@@ -301,7 +324,12 @@ async def main():
         await page.reload(wait_until="networkidle")
         await page.get_by_role("button", name="이어서 풀기", exact=True).click()
         await page.get_by_role("tab", name="노트", exact=True).click()
-        assert await page.get_by_role("textbox", name="풀이 노트", exact=True).input_value() == note
+        await check_saved_code()
+        assert await (await note_editor()).input_value() == note
+        await page.get_by_role("button", name="노트 보기", exact=True).click()
+        await check_saved_code()
+        assert await page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+        await page.screenshot(path="/tmp/bigbungi-saved-note-mobile.png", full_page=True)
         assert await page.get_by_role("button", name="AI 대화로 노트 생성", exact=True).is_disabled()
         await page.get_by_role("button", name="AI 질문에서 키와 모델 연결하기", exact=True).click()
         assert await page.locator("#gemini-key").input_value() == ""
@@ -309,6 +337,7 @@ async def main():
         await page.screenshot(path="/tmp/bigbungi-gemini-key-setup-mobile.png", full_page=True)
         assert not errors, errors
         print("PASS: cancellation, mobile layout, no key persistence and key cleared after reload.", flush=True)
+        print("PASS: saved AI notes retain highlighted code blocks and indentation after editing, navigation, mobile rendering and reload.", flush=True)
         await browser.close()
 
 

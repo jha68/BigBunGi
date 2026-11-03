@@ -65,6 +65,8 @@ async def main():
         await page.get_by_label('풀이 노트').fill('E2E: ddof 조건 확인')
         await page.reload(wait_until='networkidle')
         await page.get_by_role('tab',name='노트',exact=True).click()
+        assert 'E2E: ddof 조건 확인' in await page.get_by_role('region',name='저장된 풀이 노트',exact=True).inner_text()
+        await page.get_by_role('button',name='노트 편집',exact=True).click()
         assert await page.get_by_label('풀이 노트').input_value()=='E2E: ddof 조건 확인'
         await page.get_by_role('tab',name='문제',exact=True).click()
         await page.get_by_role('button',name='막혔다면 힌트 보기').click()
