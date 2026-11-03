@@ -8,6 +8,15 @@
 .panel-tabs .gemini-tab {
   color: #8c86b4;
 }
+.ai-tab-shortcut {
+  margin-left: 4px;
+  padding: 2px 4px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 10px;
+  white-space: nowrap;
+}
 .panel-tabs .gemini-tab.active {
   color: #7564bd;
 }

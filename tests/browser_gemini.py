@@ -93,6 +93,33 @@ async def main():
         await page.wait_for_function("!!document.querySelector('[data-testid=run-code]') && !document.querySelector('[data-testid=run-code]').disabled", timeout=120000)
         editor = page.get_by_role("textbox", name="Python 코드 편집기", exact=True)
 
+        ai_tab = page.get_by_role("tab", name="AI 질문", exact=True)
+        assert await ai_tab.locator("kbd").inner_text() == "Alt + Q"
+        await editor.click()
+        await page.keyboard.press("Alt+q")
+        question_input = page.get_by_role("textbox", name="Gemini에게 질문", exact=True)
+        assert await ai_tab.get_attribute("aria-selected") == "true"
+        assert await question_input.evaluate("el => el === document.activeElement")
+        await question_input.fill("단축키로 작성한 질문 초안")
+        await page.get_by_role("button", name="AI 대화 확대", exact=True).click()
+        await page.keyboard.press("Alt+q")
+        assert await page.get_by_role("tab", name="문제", exact=True).get_attribute("aria-selected") == "true"
+        assert await page.locator(".problem-body").evaluate("el => el === document.activeElement")
+        assert await page.locator(".problem-panel.gemini-expanded").count() == 0
+        await page.keyboard.press("Alt+q")
+        assert await question_input.input_value() == "단축키로 작성한 질문 초안"
+        await page.keyboard.press("Alt+Shift+q")
+        assert await ai_tab.get_attribute("aria-selected") == "true"
+        await question_input.dispatch_event("keydown", {"code": "KeyQ", "key": "q", "altKey": True, "isComposing": True})
+        assert await ai_tab.get_attribute("aria-selected") == "true"
+        await question_input.fill("")
+        await page.keyboard.press("Alt+q")
+        await page.get_by_role("tab", name="데이터", exact=False).click()
+        await page.keyboard.press("Alt+q")
+        assert await ai_tab.get_attribute("aria-selected") == "true"
+        await page.keyboard.press("Alt+q")
+        print("PASS: Alt+Q toggles problem/AI from editor, composer and data, preserves drafts, collapses expanded chat and moves focus; modified/composing events are ignored.", flush=True)
+
         async def edit(source):
             await editor.click(); await editor.press("Control+a"); await page.keyboard.insert_text(source)
 

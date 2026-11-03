@@ -201,6 +201,32 @@ function App({ initialState = initial, onStateChange, syncControls }) {
     toastTimer.current = setTimeout(() => setToast(""), 5000);
   }, []);
   const terminateRun = useRef(null);
+  const problemBody = useRef(null), shortcutFocus = useRef(false);
+
+  useEffect(() => {
+    const switchQuestionTab = (event) => {
+      if (
+        !problem || !event.altKey || event.ctrlKey || event.metaKey || event.shiftKey ||
+        event.code !== "KeyQ" || event.isComposing || event.keyCode === 229 ||
+        event.repeat || event.defaultPrevented || document.querySelector("dialog[open]")
+      ) return;
+      event.preventDefault();
+      shortcutFocus.current = true;
+      setAiExpanded(false);
+      setLeftTab((tab) => tab === "ai" ? "problem" : "ai");
+    };
+    document.addEventListener("keydown", switchQuestionTab);
+    return () => document.removeEventListener("keydown", switchQuestionTab);
+  }, [problem]);
+
+  useEffect(() => {
+    if (!shortcutFocus.current) return;
+    shortcutFocus.current = false;
+    const target = leftTab === "ai"
+      ? problemBody.current?.querySelector('textarea[aria-label="Gemini에게 질문"]')
+      : problemBody.current;
+    target?.focus();
+  }, [leftTab]);
 
   useEffect(() => {
     jsonFile("content/catalog.json")
@@ -781,6 +807,9 @@ function App({ initialState = initial, onStateChange, syncControls }) {
                   <button
                     role="tab"
                     aria-selected={leftTab === "ai"}
+                    aria-label="AI 질문"
+                    aria-keyshortcuts="Alt+Q"
+                    title="Alt + Q: 문제 ↔ AI 질문 전환"
                     className={
                       leftTab === "ai" ? "active gemini-tab" : "gemini-tab"
                     }
@@ -788,6 +817,7 @@ function App({ initialState = initial, onStateChange, syncControls }) {
                   >
                     <Sparkles size={14} />
                     AI 질문
+                    <kbd className="ai-tab-shortcut" aria-hidden="true">Alt + Q</kbd>
                   </button>
                   {solutions[selected] && (
                     <button
@@ -802,6 +832,8 @@ function App({ initialState = initial, onStateChange, syncControls }) {
                 </div>
                 <div
                   className={`problem-body ${leftTab === "ai" ? "gemini-mode" : ""}`}
+                  ref={problemBody}
+                  tabIndex={-1}
                 >
                   <GeminiTutor
                     problem={problem}
