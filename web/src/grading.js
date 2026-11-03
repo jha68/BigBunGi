@@ -4,22 +4,30 @@
 export function gradeNumeric(spec, answers) {
   const details = spec.fields.map((field) => {
     const raw = answers?.[field.key];
-    const value =
-      (typeof raw === "string" && raw.trim() === "") ||
-      raw == null ||
-      typeof raw === "boolean"
-        ? NaN
-        : Number(raw);
+    const text = typeof raw === "string" || typeof raw === "number"
+      ? String(raw).trim() : "";
+    const decimal = text.match(/^[+-]?(\d+(?:\.\d*)?|\.\d+)(?:e([+-]?\d+))?$/i);
+    const value = decimal ? Number(text) : NaN;
     const expected = spec.expected[field.key];
-    const tolerance =
-      field.decimals === 0 ? 1e-8 : 0.5001 * 10 ** -field.decimals;
+    // Count effective decimal places, allowing trailing zeros and scientific
+    // notation without rounding the submitted value on the learner's behalf.
+    const coefficient = decimal?.[1] || "";
+    const fraction = coefficient.split(".")[1] || "";
+    const trailingZeros = coefficient.replace(".", "").match(/0*$/)[0].length;
+    const places = Math.max(0, fraction.length - Number(decimal?.[2] || 0) - trailingZeros);
+    const precisionValid = !!decimal && places <= field.decimals;
     return {
       key: field.key,
       label: field.label,
       actual: Number.isFinite(value) ? value : null,
       expected,
+      formatError: Number.isFinite(value) && !precisionValid
+        ? field.decimals === 0
+          ? "정수로 제출하세요."
+          : `소수 ${field.decimals}자리까지 반올림해 제출하세요.`
+        : "",
       correct:
-        Number.isFinite(value) && Math.abs(value - expected) <= tolerance,
+        Number.isFinite(value) && precisionValid && value === expected,
     };
   });
   const count = details.filter((x) => x.correct).length;

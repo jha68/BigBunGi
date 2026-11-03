@@ -278,6 +278,8 @@ async def main():
         await page.get_by_role("button", name="설정 접기", exact=True).click()
         await page.get_by_role("tab", name="노트", exact=True).click()
         assert await page.locator("#gemini-model:visible, #gemini-key:visible").count() == 0
+        note_request = page.get_by_role("textbox", name="노트 생성 요청 (선택사항)", exact=True)
+        await note_request.fill("Z-score 공식과 ddof의 차이를 포함해 줘.")
         await page.get_by_role("textbox", name="풀이 노트", exact=True).fill("직접 작성한 메모")
         await page.get_by_role("button", name="AI 대화로 노트 생성", exact=True).click()
         await page.wait_for_selector(".note-ai [role=alert]")
@@ -287,14 +289,17 @@ async def main():
         assert await page.get_by_role("textbox", name="풀이 노트", exact=True).input_value() == "직접 작성한 메모"
         await page.get_by_role("button", name="AI 대화로 노트 생성", exact=True).click()
         await page.get_by_role("button", name="노트 생성 중지", exact=True).wait_for()
+        await note_request.fill("다음 생성에서는 예외 처리도 포함해 줘.")
         await page.get_by_role("textbox", name="풀이 노트", exact=True).fill("생성 중 수정한 메모")
         await page.locator(".question-link").nth(1).click()
         await page.get_by_role("tab", name="노트", exact=True).click()
+        assert await note_request.input_value() == ""
         assert not await page.locator(".note-ai-preview").count()
         await page.get_by_role("textbox", name="풀이 노트", exact=True).fill("두 번째 문제 메모")
         note_release.set()
         await page.locator(".question-link").nth(0).click()
         await page.get_by_role("tab", name="노트", exact=True).click()
+        assert await note_request.input_value() == "다음 생성에서는 예외 처리도 포함해 줘."
         await page.wait_for_selector(".note-ai-preview")
         assert await page.get_by_role("textbox", name="Python 코드 예시", exact=True).get_attribute("contenteditable") == "false"
         sent_note = [r for r in requests if r["body"]][-1]
@@ -302,7 +307,8 @@ async def main():
         assert sent_note["key"] == KEY
         note_data = json.loads(sent_note["body"]["contents"][0]["parts"][0]["text"])
         assert len(note_data["conversations"]) == 2
-        assert list(note_data) == ["conversations"]
+        assert list(note_data) == ["conversations", "instructions"]
+        assert note_data["instructions"] == "Z-score 공식과 ddof의 차이를 포함해 줘."
         assert "두 번째 문제 힌트" not in json.dumps(note_data,ensure_ascii=False)
         await page.get_by_role("button", name="내 노트에 추가", exact=True).click()
         await check_saved_code()
@@ -323,6 +329,17 @@ async def main():
         print("PASS: AI notes share model/key, include only this problem's completed chats, handle quota and preserve concurrent edits across navigation.", flush=True)
 
         # Mark this problem solved, then exercise both re-entry choices.
+        await edit("answers = {'result': 54.3876}")
+        await editor.press("Control+Enter")
+        await page.wait_for_function("JSON.parse(localStorage.getItem('bigbungi.practice.v1')).answers['t1-01']?.result === '54.3876'")
+        await page.get_by_test_id("grade-code").click()
+        await page.wait_for_selector('[data-testid=grade-result].retry')
+        assert "소수 3자리까지 반올림해 제출하세요." in await page.get_by_test_id("grade-result").inner_text()
+        await page.set_viewport_size({"width": 390, "height": 844})
+        assert await page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+        await page.screenshot(path="/tmp/bigbungi-rounding-feedback-mobile.png", full_page=True)
+        await page.set_viewport_size({"width": 1512, "height": 1080})
+        print("PASS: unrounded Python answers inside the old half-unit tolerance are rejected with precision feedback.", flush=True)
         reference = await page.evaluate("async () => (await (await fetch('content/solutions/t1-01.json')).json())")
         starter = await page.evaluate("async () => (await (await fetch('content/problems/t1-01.json')).json()).starter")
         await edit(reference["code"])

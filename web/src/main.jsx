@@ -1436,7 +1436,7 @@ function App({ initialState = initial, onStateChange, syncControls }) {
                                     <strong>
                                       {d.correct
                                         ? "정답"
-                                        : `정답 ${d.expected}`}
+                                        : d.formatError || `정답 ${d.expected}`}
                                     </strong>
                                   </div>
                                 ))}
@@ -1452,7 +1452,7 @@ function App({ initialState = initial, onStateChange, syncControls }) {
                       <ShieldCheck size={13} />
                       {problem.type === 2
                         ? "예측값은 정답 데이터로 평가합니다"
-                        : "반올림 오차를 고려해 채점합니다"}
+                        : "지정된 소수 자릿수까지 반올림해 제출하세요"}
                     </span>
                     <button
                       className="grade-button"

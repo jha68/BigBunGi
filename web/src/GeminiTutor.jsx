@@ -91,6 +91,7 @@ export function GeminiProvider({
   );
   const [pending, setPending] = useState(null);
   const [noteGenerations, setNoteGenerations] = useState({});
+  const [noteInstructions, setNoteInstructions] = useState({});
   const activeKey = useRef(""),
     configuredKeys = useRef([]),
     activeIndex = useRef(0),
@@ -425,7 +426,7 @@ export function GeminiProvider({
       }
     }
   }
-  async function generateNote({ problem, code, result }) {
+  async function generateNote({ problem, instructions = "" }) {
     if (request.current || connection.status !== "ready") return;
     if (!historyStore.ready(problem.id)) return;
     const pid = problem.id;
@@ -443,6 +444,7 @@ export function GeminiProvider({
         {
           model,
           task: "notes",
+          instructions,
           history: turns[pid] || [],
           signal: controller.signal,
         },
@@ -506,6 +508,8 @@ export function GeminiProvider({
         send,
         generateNote,
         noteGenerations,
+        noteInstructions,
+        setNoteInstructions,
         clearNote: (pid) =>
           setNoteGenerations((previous) => ({ ...previous, [pid]: null })),
         cancel: () => request.current?.abort(),
@@ -529,6 +533,7 @@ export function GeminiNoteGenerator({
 }) {
   const tutor = useContext(TutorContext);
   const generation = tutor.noteGenerations[problem.id];
+  const instructions = tutor.noteInstructions[problem.id] || "";
   const count = (tutor.turns[problem.id] || []).filter(
     (turn) => turn.answer && !turn.error,
   ).length;
@@ -547,7 +552,7 @@ export function GeminiNoteGenerator({
           disabled={
             !ready || !count || busy || !tutor.historyStore.ready(problem.id)
           }
-          onClick={() => tutor.generateNote({ problem, code, result })}
+          onClick={() => tutor.generateNote({ problem, instructions })}
         >
           {generating ? (
             <Loader2 size={13} className="spin" />
@@ -559,8 +564,22 @@ export function GeminiNoteGenerator({
       </div>
       <p>
         이 문제의 질문·답변 {count}개를 질문 한 줄·답변 한 문장과 핵심 코드
-        1~3줄로 짧게 저장합니다.
+        1~3줄로 짧게 요약합니다. 추가 요청이 있으면 함께 반영합니다.
       </p>
+      <label className="note-ai-instructions" htmlFor={`note-instructions-${problem.id}`}>
+        노트 생성 요청 (선택사항)
+        <textarea
+          id={`note-instructions-${problem.id}`}
+          rows={2}
+          maxLength={2000}
+          placeholder="예: Z-score 공식과 ddof의 차이를 포함해 줘."
+          value={instructions}
+          onChange={(event) => tutor.setNoteInstructions((previous) => ({
+            ...previous,
+            [problem.id]: event.target.value,
+          }))}
+        />
+      </label>
       {ready ? (
         <small>
           AI 질문과 동일한 모델:{" "}

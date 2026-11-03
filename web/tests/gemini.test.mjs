@@ -349,3 +349,22 @@ test("note generation summarizes all successful conversations, excludes failed t
   assert.equal(sent.key, key);
   assert.deepEqual(sent.body, payload);
 });
+
+test("note generation forwards optional user instructions separately and redacts both keys", async () => {
+  const history = [{ question: "오류 원인?", answer: "수정 방법" }];
+  const backup = "test-only-backup-key";
+  const instructions = `  Z-score 공식과 ddof 차이를 포함해 줘. ${key} ${backup}  `;
+  const payload = makeNoteRequest({ history, instructions, apiKey: [key, backup] });
+  const data = JSON.parse(payload.contents[0].parts[0].text);
+  assert.deepEqual(data.conversations, history);
+  assert.equal(data.instructions, "Z-score 공식과 ddof 차이를 포함해 줘. [API_KEY_REDACTED] [API_KEY_REDACTED]");
+  assert.ok(payload.systemInstruction.parts[0].text.includes("기본 요약 형식보다 우선 반영"));
+  assert.deepEqual(Object.keys(JSON.parse(makeNoteRequest({ history, instructions: "  " }).contents[0].parts[0].text)), ["conversations"]);
+  assert.throws(() => makeNoteRequest({ history, instructions: "가".repeat(2001) }), /2,000/);
+  let sent;
+  await askGemini({ apiKey: key, redactionKeys: [backup], model: "models/gemini-test", history, task: "notes", instructions }, async (url, options) => {
+    sent = JSON.parse(options.body);
+    return ok({ candidates: [{ content: { parts: [{ text: "요약" }] }, finishReason: "STOP" }] });
+  });
+  assert.deepEqual(sent, payload);
+});

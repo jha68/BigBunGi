@@ -8,14 +8,34 @@ import {
   macroF1,
 } from "../src/grading.js";
 
-test("numeric rounding tolerance accepts rounding, rejects blanks and NaN", () => {
+test("numeric answers must already be rounded; the grader does not round for the learner", () => {
   const spec = {
     expected: { result: 1.235 },
     fields: [{ key: "result", label: "값", decimals: 3 }],
   };
-  assert.equal(gradeNumeric(spec, { result: "1.23455" }).passed, true);
-  for (const result of ["", "   ", null, "NaN", Infinity, true, "1.234"])
+  for (const result of [1.235, "1.235", "1.2350", "1235e-3", "0.001235e3"])
+    assert.equal(gradeNumeric(spec, { result }).passed, true, String(result));
+  for (const result of ["", "   ", null, "NaN", Infinity, true, [], {}, "1.234", "1.23455", "1.2354", "1.23500000001"])
     assert.equal(gradeNumeric(spec, { result }).passed, false);
+  assert.match(gradeNumeric(spec, { result: "1.23455" }).details[0].formatError, /소수 3자리/);
+});
+
+test("precision follows each field, including integers, six-place p-values and trailing zeros", () => {
+  const check = (expected, decimals, value) => gradeNumeric({
+    expected: { result: expected }, fields: [{ key: "result", label: "값", decimals }],
+  }, { result: value }).passed;
+  assert.equal(check(1.2, 3, "1.2"), true);
+  assert.equal(check(1.2, 3, "1.2000"), true);
+  assert.equal(check(-1.235, 3, "-1.235"), true);
+  assert.equal(check(-1.235, 3, "-1.2349"), false);
+  assert.equal(check(2, 0, "2000e-3"), true);
+  assert.equal(check(2, 0, "2.000000001"), false);
+  assert.equal(check(0.000003, 6, "3e-6"), true);
+  assert.equal(check(0.000003, 6, "2.99999e-6"), false);
+  assert.equal(check(0, 3, "0.0000"), true);
+  assert.equal(check(0, 3, "0.00001"), false);
+  assert.equal(check(0, 3, "1e-9999"), false);
+  assert.equal(check(0, 3, "0x0"), false);
 });
 
 test("AUC handles probability ties and constant predictions", () => {
