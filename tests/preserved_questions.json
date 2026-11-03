@@ -1,0 +1,184 @@
+{
+  "t1-01": {
+    "problem_sha256": "e5cabab5ab6318f3ad6918f90667d246f4fd3c077e75f47bf42837715228fb08",
+    "csv_sha256": {
+      "customers.csv": "27659510cae587587ece029f2bcbe2f41e35313c87814a6a9eaa147ab5ea5440"
+    },
+    "grading": {
+      "type": 1,
+      "expected": {
+        "result": 54.388
+      },
+      "fields": [
+        {
+          "key": "result",
+          "label": "80세 이상 고객의 보정 후 평균 점수",
+          "decimals": 3,
+          "format": "소수 3자리까지 반올림"
+        }
+      ]
+    }
+  },
+  "t1-02": {
+    "problem_sha256": "883d0bbffc9a498c8c98ec8ee0e95e86784305a07078d633880f00ff2750a230",
+    "csv_sha256": {
+      "members.csv": "4621e39ae7105226180f8faa24ee7ffd0043e3438a60d0ae99e88bfc05009e9f"
+    },
+    "grading": {
+      "type": 1,
+      "expected": {
+        "result": 63.049
+      },
+      "fields": [
+        {
+          "key": "result",
+          "label": "대체 전 − 대체 후 표본표준편차",
+          "decimals": 3,
+          "format": "소수 3자리까지 반올림"
+        }
+      ]
+    }
+  },
+  "t1-03": {
+    "problem_sha256": "c12848d1ad3d11e798a0c7ae3d981525a68e2556e728ed7acc9363489b36a69c",
+    "csv_sha256": {
+      "deliveries.csv": "82d119f4845dc78ba80ed278e6a4683d81b335602b50028d4edc3825b89df990"
+    },
+    "grading": {
+      "type": 1,
+      "expected": {
+        "count": 35,
+        "total": 17756.27
+      },
+      "fields": [
+        {
+          "key": "count",
+          "label": "이상치 행 개수",
+          "decimals": 0,
+          "format": "정수"
+        },
+        {
+          "key": "total",
+          "label": "이상치 배달시간 합",
+          "decimals": 3,
+          "format": "소수 3자리까지 반올림"
+        }
+      ]
+    }
+  },
+  "t1-04": {
+    "problem_sha256": "e2546e5083514e8baca76400a89ee016fae4bb5a40959ea8ddec2929df3f35d7",
+    "csv_sha256": {
+      "transactions.csv": "8aa1aa296b3f057172e1df88477a6362899b6fcc04effb18a3888c1e3254512e"
+    },
+    "grading": {
+      "type": 1,
+      "expected": {
+        "customer_id": 1076,
+        "net_sales": 1719000
+      },
+      "fields": [
+        {
+          "key": "customer_id",
+          "label": "순매출 1위 고객 번호",
+          "decimals": 0,
+          "format": "정수"
+        },
+        {
+          "key": "net_sales",
+          "label": "해당 고객의 순매출(원)",
+          "decimals": 0,
+          "format": "정수"
+        }
+      ]
+    }
+  },
+  "t1-05": {
+    "problem_sha256": "4a22e7a09fec3dc6c00e90108fcbed8edf7e81d7f6086e933d7f9182ff7cec74",
+    "csv_sha256": {
+      "visits.csv": "42cbdd0394dcb77b4ba40b3fdbfbeb337ddd892f7c1d1aa12917902842e86d18"
+    },
+    "grading": {
+      "type": 1,
+      "expected": {
+        "month": 7,
+        "rate": 96.0
+      },
+      "fields": [
+        {
+          "key": "month",
+          "label": "전환율이 가장 높은 월",
+          "decimals": 0,
+          "format": "정수"
+        },
+        {
+          "key": "rate",
+          "label": "해당 월 전환율(%)",
+          "decimals": 3,
+          "format": "소수 3자리까지 반올림"
+        }
+      ]
+    }
+  },
+  "t1-06": {
+    "problem_sha256": "0182d4c0f9f3d37b1c4c2dae623a09fd052c1d7806eb3664a272df4032901e2d",
+    "csv_sha256": {
+      "customers.csv": "beea1d778e2ef2f5bf6eae1008df81a2edbb274847a0a1989761e2a247e06f8d",
+      "orders.csv": "40b57708635ed864a01160d34fbe396657910186066996345b5db6f8b3166e2c"
+    },
+    "grading": {
+      "type": 1,
+      "expected": {
+        "result": 55313.253
+      },
+      "fields": [
+        {
+          "key": "result",
+          "label": "VIP 완료 주문의 지역별 평균 중 최댓값",
+          "decimals": 3,
+          "format": "소수 3자리까지 반올림"
+        }
+      ]
+    }
+  },
+  "t1-07": {
+    "problem_sha256": "9b9b32fab354e4952b245ecfed122e1ccf34945244a0e2b22c58975abd212b58",
+    "csv_sha256": {
+      "sensors.csv": "aeba732d5d8437d6c1f590d7f7cf0e001c20ff035dc6563fa5452d4ce700f722"
+    },
+    "grading": {
+      "type": 1,
+      "expected": {
+        "result": 67.343
+      },
+      "fields": [
+        {
+          "key": "result",
+          "label": "조건을 만족하는 센서의 원본 energy 평균",
+          "decimals": 3,
+          "format": "소수 3자리까지 반올림"
+        }
+      ]
+    }
+  },
+  "t1-08": {
+    "problem_sha256": "0fe99991f245ce02d7bc3bffd5e4e019a49667220a1ab5e4a651ca79426e74b4",
+    "csv_sha256": {
+      "sales.csv": "217907f023be13c8f24596d0ae0221362ee381702096a1c7c433f84f3b4c0f46"
+    },
+    "grading": {
+      "type": 1,
+      "expected": {
+        "result": 3953800
+      },
+      "fields": [
+        {
+          "key": "result",
+          "label": "식품 상위 3개 지점의 생활 매출 합계",
+          "decimals": 0,
+          "format": "정수"
+        }
+      ]
+    }
+  }
+}

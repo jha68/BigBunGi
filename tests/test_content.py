@@ -1,4 +1,5 @@
 import json
+import hashlib
 import math
 import os
 from pathlib import Path
@@ -15,6 +16,15 @@ from sklearn.metrics import roc_auc_score, f1_score, mean_squared_error
 from bigbungi.content import PROBLEMS
 from bigbungi.prepare import DATA, PUBLIC, reference_result, prepare
 from bigbungi.datasets import generate
+
+
+def original_problem_hash(problem):
+    """Exclude only metadata which prepare() adds to the in-memory file specs."""
+    p = json.loads(json.dumps(problem))
+    for file in p['files']:
+        for key in ('rows', 'missing', 'preview'):
+            file.pop(key, None)
+    return hashlib.sha256(json.dumps(p, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
 class ContentTests(unittest.TestCase):
@@ -36,6 +46,37 @@ class ContentTests(unittest.TestCase):
                     df=pd.read_csv(DATA/p['id']/f['name'])
                     self.assertGreater(len(df),100)
                     self.assertEqual(list(df.columns),[c['name'] for c in f['columns']])
+
+    def test_previously_solved_questions_are_preserved(self):
+        snapshot = json.loads((Path(__file__).parent / 'preserved_questions.json').read_text())
+        for p in PROBLEMS:
+            if p['id'] not in snapshot:
+                continue
+            with self.subTest(problem=p['id']):
+                saved = snapshot[p['id']]
+                self.assertEqual(original_problem_hash(p), saved['problem_sha256'])
+                self.assertEqual(self.keys[p['id']], saved['grading'])
+                for filename, digest in saved['csv_sha256'].items():
+                    for directory in (DATA, PUBLIC / 'data'):
+                        self.assertEqual(hashlib.sha256((directory / p['id'] / filename).read_bytes()).hexdigest(), digest)
+
+    def test_revised_answer_contracts_and_prediction_requirements(self):
+        for p in PROBLEMS:
+            with self.subTest(problem=p['id']):
+                if p['type'] == 1 and p['number'] >= 9:
+                    self.assertEqual(len(p['fields']), 1)
+                elif p['type'] == 3:
+                    self.assertEqual(len(p['steps']), 3)
+                    self.assertEqual(len(p['fields']), 3)
+                elif p['type'] == 2:
+                    text = '\n'.join(p['steps'])
+                    self.assertIn(p['submission']['target'], text)
+                    self.assertIn(p['submission']['prediction'], text)
+                    self.assertIn(p['submission']['metric'].upper(), text)
+                    self.assertIn('submission.csv', text)
+                    self.assertNotIn('predict_proba', text)
+                    self.assertNotIn('fit', text)
+                    self.assertNotIn('Pipeline', text)
 
     def test_numeric_references_against_actual_csvs(self):
         for p in PROBLEMS:

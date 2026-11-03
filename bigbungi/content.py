@@ -147,38 +147,80 @@ question("t1-08","상품군별 매출 피벗과 순위",
  print(answers)
  ''',["pivot_table의 aggfunc 기본값은 mean입니다. sum을 지정하세요.","상위 지점을 고르는 기준 열과 최종 합계를 구하는 열이 다릅니다."],
  "식품 매출로 순위를 정하고 생활 매출을 합산하는 순서를 구분하세요. sales가 이미 총매출이므로 quantity를 곱하면 안 됩니다.",minutes=15,tags=["피벗 테이블","순위","다단계 집계"]),
-question("t1-09","Z-score 이상치 제거 후 중앙값",
- "측정 장비의 360개 관측값에서 표준점수 기준 이상치를 한 번 제거한 후, 특정 배치의 대표값을 계산합니다.",
- ["전체 value의 평균과 모집단표준편차(ddof=0)를 사용하여 Z-score를 계산합니다.","Z-score의 절대값이 2.5를 초과하는 행을 제거합니다. 평균·표준편차를 다시 계산하지 않습니다.","남은 행 중 batch가 B인 행의 value 중앙값을 구합니다."],
- [file("measurements","장비 측정값과 배치",["id|정수|관측 번호","value|실수|장비 측정값","batch|문자|배치 A, B, C"])],
- [answer("result","이상치 제거 후 B 배치의 중앙값")],
- '''
- import pandas as pd
- df = pd.read_csv("data/measurements.csv")
- z = (df["value"]-df["value"].mean())/df["value"].std(ddof=0)
- result = df.loc[(z.abs() <= 2.5) & (df["batch"] == "B"), "value"].median()
- answers = {"result": round(float(result), 3)}
- print(answers)
- ''',["pandas std의 기본 ddof는 1입니다. 이 문제에서는 0을 명시하세요.","배치 B로 제한하기 전에 전체 데이터로 Z-score를 구하세요."],
- "이상치 기준은 전체 데이터에서 계산합니다. 배치별 표준화나 반복 제거는 이 문제의 조건과 다릅니다.",tags=["표준화","이상치","중앙값"]),
-question("t1-10","연도별 배출량과 연평균 성장률",
- "2020~2025년 4개국의 산업별 월간 온실가스 배출량입니다. 국가·연도별 합계로 연도별 1위 국가를 찾고, 전체 배출량의 연평균 성장률(CAGR)을 계산합니다.",
- ["year와 country별로 emission을 합산합니다. 산업·월을 모두 포함합니다.","각 연도의 배출량 1위 국가를 선택합니다. 동률이면 country를 오름차순으로 선택합니다.","연도별 1위를 가장 많이 한 국가의 1위 횟수를 구합니다. 국가 간 횟수가 동률이면 국가명 오름차순으로 선택합니다.","전체 국가의 2020년 합계와 2025년 합계로 CAGR = (2025년 합계 / 2020년 합계) ** (1/5) − 1을 구합니다. CAGR은 백분율로 변환하지 않고 소수로 제출합니다."],
- [file("emissions","국가·산업별 월간 배출량",["year|정수|연도(2020~2025)","month|정수|월(1~12)","country|문자|국가명","sector|문자|제조 또는 운송","emission|실수|배출량(천 톤)"])],
- [answer("wins","최다 1위 국가의 1위 횟수",0),answer("cagr","전체 배출량 CAGR",6)],
- '''
- import pandas as pd
- df = pd.read_csv("data/emissions.csv")
- totals = df.groupby(["year", "country"], as_index=False)["emission"].sum()
- first = totals.sort_values(["year", "emission", "country"], ascending=[True, False, True]).drop_duplicates("year")
- counts = first.groupby("country").size().reset_index(name="wins")
- wins = counts.sort_values(["wins", "country"], ascending=[False, True]).iloc[0]["wins"]
- annual = df.groupby("year")["emission"].sum()
- cagr = (annual.loc[2025]/annual.loc[2020])**(1/5)-1
- answers = {"wins": int(wins), "cagr": round(float(cagr), 6)}
- print(answers)
- ''',["국가·연도 합계를 구한 뒤 연도별 첫 행을 뽑을 수 있도록 정렬하세요.","2020~2025는 관측 연도는 6개이지만 성장 기간은 5년입니다."],
- "CAGR의 지수는 연도 개수의 역수가 아니라 기간 차이의 역수입니다. 이 문제는 0.09와 같은 소수를 요구하므로 100을 곱하지 않습니다.",difficulty="중상",minutes=18,tags=["복합 집계","동률 처리","CAGR"]),
+question(
+    "t1-09",
+    "Z-score 이상치 제거 후 중앙값",
+    "measurements.csv는 배치별 측정 자료이다.",
+    [
+        "전체 value의 평균과 모집단 표준편차를 기준으로 Z-score를 계산하고, 절댓값이 2.5를 초과하는 행을 제외하시오.",
+        "남은 자료에서 batch가 B인 행의 value 중앙값을 구하시오. 이상치 기준은 한 번만 계산한다.",
+    ],
+    [
+        file("measurements", "장비 측정값과 배치", [
+            "id|정수|관측 번호",
+            "value|실수|장비 측정값",
+            "batch|문자|배치 A, B, C",
+        ]),
+    ],
+    [
+        answer("result", "이상치 제거 후 B 배치의 중앙값", 3),
+    ],
+    '''
+    import pandas as pd
+    df = pd.read_csv('data/measurements.csv')
+    z = (df['value'] - df['value'].mean()) / df['value'].std(ddof=0)
+    result = df.loc[(z.abs() <= 2.5) & (df['batch'] == 'B'), 'value'].median()
+    answers = {'result': round(float(result), 3)}
+    print(answers)
+    ''',
+    [
+        "Z-score 기준은 batch를 나누기 전 전체 자료에서 계산합니다.",
+        "전체 자료에서 이상치를 판정한 다음 배치 조건을 적용합니다. std(ddof=0)을 사용합니다.",
+    ],
+    "전체 자료에서 이상치를 판정한 다음 배치 조건을 적용합니다. std(ddof=0)을 사용합니다.",
+    difficulty="중",
+    minutes=12,
+    tags=["표준화", "이상치", "중앙값"],
+),
+question(
+    "t1-10",
+    "연도별 배출량 1위 국가 집계",
+    "emissions.csv는 국가·산업별 월간 배출량 자료이다.",
+    [
+        "연도별로 국가의 전체 산업·월 배출량을 합산하고, 배출량이 가장 큰 국가를 한 곳씩 선정하시오. 동률이면 국가명 오름차순으로 선정한다.",
+        "선정 횟수가 가장 많은 국가의 선정 횟수를 정수로 구하시오.",
+    ],
+    [
+        file("emissions", "국가·산업별 월간 배출량", [
+            "year|정수|연도(2020~2025)",
+            "month|정수|월(1~12)",
+            "country|문자|국가명",
+            "sector|문자|제조 또는 운송",
+            "emission|실수|배출량(천 톤)",
+        ]),
+    ],
+    [
+        answer("wins", "최다 1위 국가의 1위 횟수", 0),
+    ],
+    '''
+    import pandas as pd
+    df = pd.read_csv('data/emissions.csv')
+    totals = df.groupby(['year', 'country'], as_index=False)['emission'].sum()
+    first = totals.sort_values(['year', 'emission', 'country'], ascending=[True, False, True]).drop_duplicates('year')
+    counts = first.groupby('country').size().reset_index(name='wins')
+    wins = counts.sort_values(['wins', 'country'], ascending=[False, True]).iloc[0]['wins']
+    answers = {'wins': int(wins)}
+    print(answers)
+    ''',
+    [
+        "연도·국가별 합계를 먼저 구한 뒤 각 연도의 1위 국가를 고릅니다.",
+        "연도·국가별 합계를 정렬한 뒤 연도별 한 행을 선택합니다. 국가별 선정 횟수의 최댓값이 최종 답입니다.",
+    ],
+    "연도·국가별 합계를 정렬한 뒤 연도별 한 행을 선택합니다. 국가별 선정 횟수의 최댓값이 최종 답입니다.",
+    difficulty="중상",
+    minutes=15,
+    tags=["복합 집계", "동률 처리", "빈도"],
+),
 ]
 
 PREDICTION_PRELUDE=code('''
@@ -200,12 +242,11 @@ def prediction(pid,title,scenario,columns,target,prediction_name,metric,threshol
     shared=["id|정수|중복 없는 식별자"]+columns
     files=[file("train","학습 데이터: 예측 대상 열 포함",shared+[f"{target}|수치|학습 정답(예측 대상)"]),file("test","평가 데이터: 예측 대상 열 없음",shared)]
     higher=metric!="rmse"
-    steps=["train.csv만 사용해 결측치와 범주형 변수를 처리하고 모델을 학습합니다. id는 식별자이므로 설명변수에서 제외하세요.",
-           "훈련·검증 데이터를 분리하여 모델 성능을 점검하세요. 전처리도 훈련 데이터에 fit하고 평가 데이터에는 transform만 적용합니다.",
-           f"test.csv의 모든 행을 예측하여 submission.csv를 만드세요. 열은 id, {prediction_name} 두 개만 사용하고, index=False로 저장합니다.",
-           f"평가 지표는 {metric.upper()}입니다. 연습 통과 기준은 {threshold} {'이상' if higher else '이하'}입니다. 실제 시험의 채점 규칙을 재현한 점수는 아닙니다."]
-    if metric=="roc_auc": steps.insert(2,f"양성 클래스({target}=1)의 발생 확률을 제출합니다. 0/1 분류값이 아닌 predict_proba의 양성 확률을 사용하세요.")
-    if metric=="macro_f1": steps.insert(2,f"{target}의 클래스는 {class_description or '0(초급), 1(중급), 2(고급)'}입니다. 확률이 아닌 최종 클래스 번호를 제출합니다.")
+    steps=[f"train.csv의 {target}을 예측하는 모형을 만들고, test.csv의 모든 관측에 대한 예측 결과를 제출하시오. id는 식별자이며 설명변수에서 제외한다.",
+           f"평가 지표는 {metric.upper()}이다. 전처리와 학습 방법 및 모형은 자유롭게 선택하되, 제공된 학습 자료만 사용한다.",
+           f"제출 파일 이름은 submission.csv이며 열은 id, {prediction_name} 순서로 구성한다. 행 인덱스는 저장하지 않으며, test.csv의 id를 누락·중복 없이 포함해야 한다."]
+    if metric=="roc_auc": steps.insert(1,f"예측 결과는 {target}=1의 발생 확률(0~1)로 제출하시오. 0 또는 1로 판정한 분류값을 제출하지 않는다.")
+    if metric=="macro_f1": steps.insert(1,f"{target}의 클래스는 {class_description or '0(초급), 1(중급), 2(고급)'}이다. 예측 확률이 아닌 최종 클래스 번호를 제출하시오.")
     sol=PREDICTION_PRELUDE+f'\ntarget = "{target}"\n'+code('''
 X = train.drop(columns=["id", target])
 y = train[target]
@@ -238,7 +279,7 @@ pipeline.fit(X, y)
     sol=sol.replace("STRATIFY_TARGET", "None" if metric=="rmse" else "y").replace("METRIC_NAME",repr(metric))
     p=question(pid,title,scenario,steps,files,[],sol,["범주형 변수는 OneHotEncoder, 수치형 결측치는 SimpleImputer로 처리할 수 있습니다. Pipeline은 데이터 누수를 줄여 줍니다.","분류는 stratify를 사용한 검증 분할을 권장합니다. 회귀의 RMSE는 MSE의 제곱근입니다. 먼저 기준 모델을 만든 뒤 개선하세요."],explanation,difficulty="중상",minutes=35,tags=[{"roc_auc":"이진 분류","rmse":"회귀","macro_f1":"다중 분류"}[metric],"전처리","CSV 제출"])
     p["submission"]={"target":target,"prediction":prediction_name,"metric":metric,"threshold":threshold,"higher":higher,"baseline":baseline if baseline is not None else .5 if metric=="roc_auc" else .333 if metric=="macro_f1" else 1500,"filename":"submission.csv"}
-    p["starter"] = 'import pandas as pd\nimport numpy as np\nfrom sklearn.model_selection import train_test_split\n\ntrain = pd.read_csv("data/train.csv")\ntest = pd.read_csv("data/test.csv")\n\nprint(train.head())\nprint(train.isna().sum())\n\n# 1. id와 예측 대상 열을 제외해 설명변수 만들기\n# 2. 훈련/검증 분리 및 전처리, 모델 학습\n# 3. test 데이터 예측\n# 4. 아래 형식으로 제출 파일 저장\n'+f'# pd.DataFrame({{"id": test["id"], "{prediction_name}": predictions}}).to_csv("submission.csv", index=False)\n'
+    p["starter"] = 'import pandas as pd\n\ntrain = pd.read_csv("data/train.csv")\ntest = pd.read_csv("data/test.csv")\n\n# 분석 코드를 작성하고 submission.csv를 저장하세요.\n'
     return p
 
 
@@ -264,70 +305,132 @@ prediction("t2-03","게임 이용자 레벨 분류",
  'RandomForestClassifier(n_estimators=100, max_depth=12, min_samples_leaf=2, random_state=42, n_jobs=1)',
  'predictions = pipeline.predict(test[X.columns]).astype(int)',
  "Macro F1은 accuracy와 다릅니다. predict 결과인 클래스 번호를 제출하고, 검증 시 f1_score(y_valid, pred, average='macro')로 비교하세요. 클래스별 성능을 함께 살피는 것이 좋습니다."),
-question("t3-01","치료 전후 변화와 집단 간 차이",
- "180명의 환자를 A·B·C 치료 그룹으로 나누어 혈압을 측정했습니다. 같은 환자의 치료 전후 값은 대응 자료입니다. 모든 검정의 유의수준은 0.05이며 결측치는 없습니다.",
- ["전체 환자의 before와 after로 양측 대응표본 t-검정을 수행합니다. 차이 방향은 before − after로 정의합니다.","대응표본 t-검정의 t 통계량과 p-value를 구합니다.","reduction = before − after를 만들고 A, B, C 세 그룹 간 reduction 평균 차이를 일원배치 분산분석(등분산 가정, scipy.stats.f_oneway)으로 검정합니다.","일원배치 분산분석의 F 통계량과 p-value를 구합니다. p-value는 소수 6자리, 통계량은 소수 3자리까지 반올림합니다."],
- [file("treatment","환자별 치료 전후 혈압",["patient_id|정수|환자 번호","group|문자|치료 그룹 A, B, C","before|실수|치료 전 혈압(mmHg)","after|실수|치료 후 혈압(mmHg)"])],
- [answer("t_stat","대응표본 t 통계량"),answer("t_pvalue","대응표본 t-검정 p-value",6),answer("f_stat","일원배치 분산분석 F 통계량"),answer("f_pvalue","일원배치 분산분석 p-value",6)],
- '''
- import pandas as pd
- from scipy import stats
- df = pd.read_csv("data/treatment.csv")
- t = stats.ttest_rel(df["before"], df["after"], alternative="two-sided")
- df["reduction"] = df["before"]-df["after"]
- f = stats.f_oneway(*(df.loc[df["group"] == g, "reduction"] for g in ["A", "B", "C"]))
- answers = {"t_stat": round(float(t.statistic), 3), "t_pvalue": round(float(t.pvalue), 6),
-            "f_stat": round(float(f.statistic), 3), "f_pvalue": round(float(f.pvalue), 6)}
- print(answers)
- ''',["같은 대상의 전후 비교에는 ttest_ind가 아니라 ttest_rel을 사용합니다.","분산분석에는 치료 후 값 자체가 아닌 감소량을 그룹별로 나누어 전달하세요."],
- "대응표본 t-검정은 평균 변화가 0인지, ANOVA는 세 그룹의 평균 감소량이 같은지를 검정합니다. p<0.05이면 각각의 귀무가설을 기각합니다. t 통계량은 두 입력의 순서를 바꾸면 부호가 바뀝니다.",difficulty="중",minutes=20,tags=["대응표본 t-검정","ANOVA","가설 검정"]),
-question("t3-02","홍보 지표와 매출의 선형회귀",
- "320건의 홍보 활동 지표와 매출 자료를 분석합니다. 수치형 변수의 상관관계와 매출 설명력을 비교하며, 모든 회귀모형은 절편을 포함하고 결측치는 없습니다.",
- ["page_time의 모평균이 300초와 같은지 양측 단일표본 t-검정을 수행하고 p-value를 구합니다.","데이터의 모든 열에 대해 Pearson 상관계수 행렬을 계산합니다. 자기 자신과의 상관계수를 제외하고 절댓값이 가장 큰 상관계수를 구합니다. 최종 답도 절댓값으로 제출합니다.","sales를 종속변수, ad_spend·visits·page_time·clicks를 설명변수로 하는 절편 포함 다중선형회귀(OLS)를 적합합니다.","절편을 제외한 회귀계수 중 p-value가 가장 작은 변수의 회귀계수와, 모형의 결정계수 R²를 구합니다."],
- [file("promotion","홍보 활동과 매출",["ad_spend|실수|광고비(만원)","visits|실수|방문 지표","page_time|실수|페이지 평균 체류시간(초)","clicks|실수|광고 클릭 지표","sales|실수|매출액(만원)"])],
- [answer("pvalue","단일표본 t-검정 p-value",6),answer("correlation","최대 절대 상관계수"),answer("coefficient","가장 유의한 설명변수의 회귀계수"),answer("r_squared","회귀모형 R²")],
- '''
- import pandas as pd
- import numpy as np
- from scipy import stats
- import statsmodels.api as sm
- df = pd.read_csv("data/promotion.csv")
- p = stats.ttest_1samp(df["page_time"], 300).pvalue
- corr = df.corr().abs()
- np.fill_diagonal(corr.values, np.nan)
- max_corr = corr.max().max()
- X = sm.add_constant(df[["ad_spend", "visits", "page_time", "clicks"]])
- model = sm.OLS(df["sales"], X).fit()
- best = model.pvalues.drop("const").idxmin()
- answers = {"pvalue": round(float(p), 6), "correlation": round(float(max_corr), 3),
-            "coefficient": round(float(model.params[best]), 3), "r_squared": round(float(model.rsquared), 3)}
- print(model.summary())
- print(answers)
- ''',["상관계수 행렬의 대각선을 제외하지 않으면 항상 1이 선택됩니다.","statsmodels.OLS에는 add_constant로 절편을 직접 추가합니다. p-value 최소 변수에서 const를 제외하세요."],
- "상관관계 계산에는 sales도 포함합니다. 계수 크기의 절댓값이 가장 큰 변수와 p-value가 가장 작은 변수는 같지 않을 수 있습니다. 표준화나 변수 제거를 하지 않고 지정한 설명변수를 모두 넣습니다.",difficulty="중상",minutes=25,tags=["단일표본 t-검정","상관계수","OLS"]),
-question("t3-03","위험도 분류와 로지스틱 회귀",
- "650명의 건강검진 자료입니다. 가족력과 질환 발생의 독립성을 검정한 뒤, 나이와 가족력으로 질환 발생 확률을 예측합니다. 로지스틱 회귀에는 벌점화를 적용하지 않으며 절편을 포함합니다.",
- ["history와 outcome의 교차표로 카이제곱 독립성 검정을 수행합니다. 연속성 보정은 적용하지 않습니다(correction=False). 검정 통계량을 구합니다.","age와 history로 outcome을 예측하는 로지스틱 회귀를 적합합니다. history의 기준 범주는 No이며 Pre와 Yes에 대한 더미변수를 만듭니다.","Pre의 오즈비 exp(회귀계수)를 구합니다. glucose와 id는 설명변수에서 제외합니다.","전체 데이터에서 outcome=1의 예측 확률이 가장 높은 환자의 id를 구합니다. 동률이면 id가 가장 작은 환자를 선택합니다.","예측 확률이 0.5 이상이면 양성(1)으로 분류합니다. 전체 데이터에서 민감도 TP/(TP+FN)를 구합니다."],
- [file("screening","건강검진 정보와 질환 발생 여부",["id|정수|환자 번호","age|정수|나이","history|문자|가족력 No, Pre, Yes","glucose|정수|공복 혈당(참고용, 모델에서 제외)","outcome|정수|질환 발생: 1, 미발생: 0"])],
- [answer("chi2","카이제곱 검정 통계량"),answer("odds_ratio","가족력 Pre의 오즈비"),answer("highest_id","예측 확률 1위 환자 id",0),answer("sensitivity","민감도")],
- '''
- import pandas as pd
- import numpy as np
- from scipy import stats
- import statsmodels.api as sm
- df = pd.read_csv("data/screening.csv")
- chi2 = stats.chi2_contingency(pd.crosstab(df["history"], df["outcome"]), correction=False).statistic
- X = pd.DataFrame({"age": df["age"].astype(float), "Pre": (df["history"] == "Pre").astype(float), "Yes": (df["history"] == "Yes").astype(float)})
- model = sm.Logit(df["outcome"], sm.add_constant(X)).fit(disp=False)
- probability = model.predict(sm.add_constant(X))
- highest = df.assign(probability=probability).sort_values(["probability", "id"], ascending=[False, True]).iloc[0]["id"]
- sensitivity = ((probability >= 0.5) & (df["outcome"] == 1)).sum()/(df["outcome"] == 1).sum()
- answers = {"chi2": round(float(chi2), 3), "odds_ratio": round(float(np.exp(model.params["Pre"])), 3),
-            "highest_id": int(highest), "sensitivity": round(float(sensitivity), 3)}
- print(model.summary())
- print(answers)
- ''',["카이제곱 검정은 crosstab 결과를 입력으로 받습니다. No를 기준으로 Pre·Yes 두 더미만 사용하세요.","오즈비는 로지스틱 회귀계수의 지수입니다. 민감도의 분모는 실제 양성인 사람의 수입니다."],
- "sklearn LogisticRegression의 기본 벌점화는 이 문제의 조건과 다릅니다. statsmodels.Logit으로 비벌점 최대우도 추정을 수행합니다. Pre·Yes의 오즈비는 같은 나이에서 No와 비교한 값입니다. 정확도와 민감도를 혼동하지 마세요.",difficulty="상",minutes=25,tags=["카이제곱","로지스틱 회귀","민감도"]),
+question(
+    "t3-01",
+    "치료 전후 혈압의 평균 차이 검정",
+    "treatment.csv는 같은 환자의 치료 전(before)과 치료 후(after) 혈압 자료이다. 전체 환자의 치료 전후 평균 혈압이 다른지 유의수준 0.05에서 양측 검정하시오. 집단 구분(group)은 사용하지 않는다. 혈압 차이는 정규성을 만족한다고 가정한다.",
+    [
+        "검정 통계량을 구하시오. 차이의 방향은 before − after로 한다.",
+        "p-value를 구하시오.",
+        "귀무가설의 기각 여부를 구하시오. p-value가 0.05 미만이면 기각 1, 그렇지 않으면 0으로 제출한다.",
+    ],
+    [
+        file("treatment", "환자별 치료 전후 혈압", [
+            "patient_id|정수|환자 번호",
+            "group|문자|치료 그룹 A, B, C",
+            "before|실수|치료 전 혈압(mmHg)",
+            "after|실수|치료 후 혈압(mmHg)",
+        ]),
+    ],
+    [
+        answer("t_stat", "검정 통계량", 3),
+        answer("pvalue", "p-value", 6),
+        answer("reject", "귀무가설 기각 여부", 0),
+    ],
+    '''
+    import pandas as pd
+    from scipy import stats
+    df = pd.read_csv("data/treatment.csv")
+    result = stats.ttest_rel(df["before"], df["after"], alternative="two-sided")
+    answers = {"t_stat": round(float(result.statistic), 3), "pvalue": round(float(result.pvalue), 6), "reject": int(result.pvalue < 0.05)}
+    print(answers)
+    ''',
+    [
+        "같은 사람의 전후 관측이므로 대응표본 검정입니다.",
+        "판정은 반올림 전 p-value로 합니다.",
+    ],
+    "대응표본 t-검정의 귀무가설은 before − after의 모평균이 0이라는 것입니다. 두 입력의 순서를 바꾸면 통계량의 부호가 바뀝니다.",
+    difficulty="중",
+    minutes=20,
+    tags=["대응표본 t-검정", "p-value", "가설 판단"],
+),
+question(
+    "t3-02",
+    "홍보 지표와 매출의 다중선형회귀",
+    "promotion.csv에서 sales를 종속변수로, ad_spend·visits·page_time·clicks를 설명변수로 사용하는 절편 포함 다중선형회귀모형을 최소제곱법으로 적합하시오. 변수 변환이나 제거는 하지 않는다.",
+    [
+        "ad_spend의 회귀계수를 구하시오.",
+        "ad_spend 회귀계수에 대한 양측 검정의 p-value를 구하시오.",
+        "모형의 결정계수 R²를 구하시오.",
+    ],
+    [
+        file("promotion", "홍보 활동과 매출", [
+            "ad_spend|실수|광고비(만원)",
+            "visits|실수|방문 지표",
+            "page_time|실수|페이지 평균 체류시간(초)",
+            "clicks|실수|광고 클릭 지표",
+            "sales|실수|매출액(만원)",
+        ]),
+    ],
+    [
+        answer("coefficient", "ad_spend 회귀계수", 3),
+        answer("pvalue", "ad_spend 계수의 p-value", 6),
+        answer("r_squared", "결정계수 R²", 3),
+    ],
+    '''
+    import pandas as pd
+    import statsmodels.api as sm
+    df = pd.read_csv("data/promotion.csv")
+    X = sm.add_constant(df[["ad_spend", "visits", "page_time", "clicks"]])
+    model = sm.OLS(df["sales"], X).fit()
+    answers = {"coefficient": round(float(model.params["ad_spend"]), 3), "pvalue": round(float(model.pvalues["ad_spend"]), 6), "r_squared": round(float(model.rsquared), 3)}
+    print(model.summary())
+    print(answers)
+    ''',
+    [
+        "statsmodels의 OLS를 사용할 수 있습니다. 절편을 포함하세요.",
+        "params, pvalues, rsquared에서 필요한 값을 확인합니다.",
+    ],
+    "ad_spend의 계수는 다른 설명변수들을 일정하게 두었을 때의 매출 변화를 뜻합니다. 계수의 p-value와 모형 전체 F검정의 p-value를 구분합니다.",
+    difficulty="중",
+    minutes=20,
+    tags=["다중선형회귀", "회귀계수", "결정계수"],
+),
+question(
+    "t3-03",
+    "가족력과 질환 발생의 로지스틱 회귀",
+    "screening.csv에서 outcome을 종속변수로, age와 history를 설명변수로 사용하는 로지스틱 회귀모형을 적합하시오. 절편을 포함하고 벌점화는 적용하지 않는다. history의 기준 범주는 No이며, 나머지 범주는 Pre와 Yes이다. id와 glucose는 설명변수에서 제외한다.",
+    [
+        "history가 Pre인 범주의 회귀계수를 구하시오.",
+        "history가 No인 경우에 대한 Pre의 오즈비를 구하시오.",
+        "전체 관측의 민감도를 구하시오. 예측 확률이 0.5 이상이면 양성(1)으로 판정한다.",
+    ],
+    [
+        file("screening", "건강검진 정보와 질환 발생 여부", [
+            "id|정수|환자 번호",
+            "age|정수|나이",
+            "history|문자|가족력 No, Pre, Yes",
+            "glucose|정수|공복 혈당(참고용, 모델에서 제외)",
+            "outcome|정수|질환 발생: 1, 미발생: 0",
+        ]),
+    ],
+    [
+        answer("coefficient", "history Pre의 회귀계수", 3),
+        answer("odds_ratio", "history Pre의 오즈비", 3),
+        answer("sensitivity", "민감도", 3),
+    ],
+    '''
+    import pandas as pd
+    import numpy as np
+    import statsmodels.api as sm
+    df = pd.read_csv("data/screening.csv")
+    X = pd.DataFrame({"age": df["age"].astype(float), "Pre": (df["history"] == "Pre").astype(float), "Yes": (df["history"] == "Yes").astype(float)})
+    model = sm.Logit(df["outcome"], sm.add_constant(X)).fit(disp=False)
+    probability = model.predict(sm.add_constant(X))
+    sensitivity = ((probability >= 0.5) & (df["outcome"] == 1)).sum() / (df["outcome"] == 1).sum()
+    answers = {"coefficient": round(float(model.params["Pre"]), 3), "odds_ratio": round(float(np.exp(model.params["Pre"])), 3), "sensitivity": round(float(sensitivity), 3)}
+    print(model.summary())
+    print(answers)
+    ''',
+    [
+        "No를 기준으로 Pre와 Yes 더미변수를 만듭니다.",
+        "오즈비는 회귀계수의 지수이고 민감도의 분모는 실제 양성 수입니다.",
+    ],
+    "statsmodels.Logit으로 비벌점 최대우도 추정을 수행합니다. 오즈비 계산에는 반올림 전 계수를 사용합니다. 민감도는 실제 양성 중 양성으로 예측한 비율입니다.",
+    difficulty="중상",
+    minutes=20,
+    tags=["로지스틱 회귀", "오즈비", "민감도"],
+),
 ]
 
 from .extra_content import additional_problems
