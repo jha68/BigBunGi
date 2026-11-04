@@ -105,6 +105,9 @@ svg {
   flex-direction: column;
   z-index: 30;
   padding: 33px 17px 20px;
+  transition:
+    transform 0.2s,
+    visibility 0.2s;
 }
 .brand {
   display: flex;
@@ -400,6 +403,16 @@ svg {
 }
 .main-shell {
   margin-left: 246px;
+  transition: margin-left 0.2s;
+}
+@media (min-width: 721px) {
+  .sidebar-collapsed .sidebar {
+    transform: translateX(-100%);
+    visibility: hidden;
+  }
+  .sidebar-collapsed .main-shell {
+    margin-left: 0;
+  }
 }
 .topbar {
   height: 65px;
@@ -448,8 +461,24 @@ svg {
   border-radius: 50%;
   background: #39b59f;
 }
-.mobile-menu {
-  display: none;
+.sidebar-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 5px;
+  color: #76899e;
+}
+.sidebar-toggle:hover {
+  background: #edf3f8;
+}
+.sidebar-toggle svg {
+  color: #6b8197;
+}
+.sidebar-toggle:focus-visible,
+.sidebar-close:focus-visible {
+  outline: 2px solid #31b7a7;
+  outline-offset: 3px;
 }
 h1 {
   font-size: 26px;
@@ -1974,13 +2003,14 @@ tr:nth-child(even) {
 @media (max-width: 720px) {
   .sidebar {
     transform: translateX(-100%);
-    transition: transform 0.2s;
+    visibility: hidden;
     width: 246px;
     padding-left: 17px;
     padding-right: 17px;
   }
   .sidebar.open {
     transform: translateX(0);
+    visibility: visible;
   }
   .nav-backdrop {
     display: block;
@@ -1996,12 +2026,6 @@ tr:nth-child(even) {
   .topbar {
     height: 57px;
     padding: 0 18px;
-  }
-  .mobile-menu {
-    display: block;
-    padding: 0;
-    margin-right: 0;
-    color: #76899e;
   }
   .breadcrumb {
     gap: 9px;
@@ -2210,20 +2234,21 @@ tr:nth-child(even) {
     font-size: 12px;
   }
 }
-.mobile-nav-close {
-  display: none;
+.sidebar-close {
+  display: flex;
+  position: absolute;
+  top: 17px;
+  right: 12px;
+  padding: 6px;
+  color: #90a1b8;
+  border-radius: 5px;
 }
-@media (max-width: 720px) {
-  .mobile-nav-close {
-    display: flex;
-    position: absolute;
-    top: 17px;
-    right: 12px;
-    padding: 6px;
-    color: #90a1b8;
-    border-radius: 5px;
-  }
-  .mobile-nav-close:hover {
-    background: #24354d;
+.sidebar-close:hover {
+  background: #24354d;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar,
+  .main-shell {
+    transition: none;
   }
 }

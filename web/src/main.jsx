@@ -23,6 +23,8 @@ import {
   Loader2,
   Maximize2,
   Minus,
+  PanelLeftClose,
+  PanelLeftOpen,
   Play,
   Plus,
   RotateCcw,
@@ -182,6 +184,10 @@ function App({ initialState = initial, onStateChange, syncControls }) {
     [fontSize, setFontSize] = useState(13);
   const [search, setSearch] = useState(""),
     [navOpen, setNavOpen] = useState(false),
+    [navCollapsed, setNavCollapsed] = useState(false),
+    [smallScreen, setSmallScreen] = useState(
+      () => matchMedia("(max-width: 720px)").matches,
+    ),
     [toast, setToast] = useState(""),
     [solutionLoading, setSolutionLoading] = useState(false);
   const worker = useRef(null),
@@ -190,6 +196,22 @@ function App({ initialState = initial, onStateChange, syncControls }) {
     fileCache = useRef({}),
     gradingCache = useRef(null),
     toastTimer = useRef(null);
+  const navToggle = useRef(null);
+  const navVisible = smallScreen ? navOpen : !navCollapsed;
+  useEffect(() => {
+    const query = matchMedia("(max-width: 720px)");
+    const changed = (event) => {
+      setSmallScreen(event.matches);
+      setNavOpen(false);
+    };
+    query.addEventListener("change", changed);
+    return () => query.removeEventListener("change", changed);
+  }, []);
+  function closeNav() {
+    if (smallScreen) setNavOpen(false);
+    else setNavCollapsed(true);
+    navToggle.current?.focus();
+  }
   const problemRef = useRef(problem),
     codeRef = useRef("");
   problemRef.current = problem;
@@ -237,10 +259,14 @@ function App({ initialState = initial, onStateChange, syncControls }) {
   useEffect(() => {
     if (!navOpen) return;
     const close = (e) => {
-      if (e.key === "Escape") setNavOpen(false);
+      if (e.key === "Escape" && !e.isComposing && !e.defaultPrevented) {
+        e.preventDefault();
+        setNavOpen(false);
+        navToggle.current?.focus();
+      }
     };
-    document.addEventListener("keydown", close);
-    return () => document.removeEventListener("keydown", close);
+    document.addEventListener("keydown", close, true);
+    return () => document.removeEventListener("keydown", close, true);
   }, [navOpen]);
   useEffect(() => {
     let live = true;
@@ -562,12 +588,18 @@ function App({ initialState = initial, onStateChange, syncControls }) {
   const currentAnswers = answers[selected] || {};
 
   return (
-    <div className="app-shell">
-      <aside className={`sidebar ${navOpen ? "open" : ""}`}>
+    <div className={`app-shell ${navCollapsed ? "sidebar-collapsed" : ""}`}>
+      <aside
+        id="problem-sidebar"
+        className={`sidebar ${navOpen ? "open" : ""}`}
+        aria-label="문제 메뉴"
+        aria-hidden={!navVisible}
+        inert={!navVisible}
+      >
         <button
-          className="mobile-nav-close"
+          className="sidebar-close"
           aria-label="문제 목록 닫기"
-          onClick={() => setNavOpen(false)}
+          onClick={closeNav}
         >
           <X size={19} />
         </button>
@@ -686,22 +718,34 @@ function App({ initialState = initial, onStateChange, syncControls }) {
           </p>
         </div>
       </aside>
-      {navOpen && (
+      {smallScreen && navOpen && (
         <button
           className="nav-backdrop"
           aria-label="목록 바깥 영역을 눌러 닫기"
-          onClick={() => setNavOpen(false)}
+          onClick={closeNav}
         />
       )}
       <main className="main-shell">
         <header className="topbar">
           <div className="breadcrumb">
             <button
-              className="mobile-menu"
-              onClick={() => setNavOpen(true)}
-              aria-label="문제 목록 열기"
+              ref={navToggle}
+              className="sidebar-toggle"
+              onClick={() =>
+                smallScreen
+                  ? setNavOpen((open) => !open)
+                  : setNavCollapsed((collapsed) => !collapsed)
+              }
+              aria-label={navVisible ? "문제 목록 접기" : "문제 목록 열기"}
+              title={navVisible ? "문제 목록 접기" : "문제 목록 열기"}
+              aria-expanded={navVisible}
+              aria-controls="problem-sidebar"
             >
-              <BookOpen size={19} />
+              {navVisible ? (
+                <PanelLeftClose size={19} />
+              ) : (
+                <PanelLeftOpen size={19} />
+              )}
             </button>
             <span>실기 연습실</span>
             <ChevronRight size={14} />
