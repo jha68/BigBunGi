@@ -315,7 +315,7 @@ function App({ initialState = initial, onStateChange, syncControls }) {
     runMeta.current = null;
     setRunning(null);
     setRuntime({ ready: false, message: "Python 실행 환경 준비 중…" });
-    const w = new Worker(BASE + "python-worker.js");
+    const w = new Worker(BASE + "python-worker.js?v=" + __PYTHON_WORKER_VERSION__);
     worker.current = w;
     timeout.current = setTimeout(() => {
       w.terminate();

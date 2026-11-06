@@ -1,5 +1,5 @@
 /* Python is isolated in a browser worker; user code never executes on the host. */
-const PYODIDE_URL = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/";
+const PYODIDE_URL = new URL("./pyodide/0.27.7/", self.location.href).href;
 let runtime;
 
 const executor = String.raw`
@@ -72,6 +72,7 @@ async function initialize() {
   importScripts(PYODIDE_URL + "pyodide.js");
   runtime = await loadPyodide({
     indexURL: PYODIDE_URL,
+    lockFileURL: PYODIDE_URL + "pyodide-lock.json" + self.location.search,
     stdout: () => {},
     stderr: () => {},
   });

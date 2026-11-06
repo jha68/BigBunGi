@@ -1,15 +1,11 @@
-"""Exercise the real browser/WASM runtime, using verified TLS for the cloud proxy.
-
-Chromium doesn't trust the session CA by default. Only CDN transport is bridged
-through Python's configured CA trust. No certificate checks are disabled, no app
-responses or code execution are mocked, and Pyodide verifies package checksums.
-"""
+"""Run real browser/WASM exercises with all cross-origin HTTP requests blocked."""
 import asyncio
 import json
 import os
 from pathlib import Path
 import urllib.request
 import hashlib
+from urllib.parse import urlsplit
 
 from playwright.async_api import async_playwright
 
@@ -33,23 +29,27 @@ async def main():
         browser=await p.chromium.launch(executable_path=os.environ.get('CHROMIUM_PATH','/usr/bin/chromium'),headless=True,
             proxy={'server':os.environ['HTTPS_PROXY'],'bypass':'localhost,127.0.0.1'} if os.environ.get('HTTPS_PROXY') else None)
         context=await browser.new_context(viewport={'width':1512,'height':1080},service_workers='block')
-        async def bridge(route):
-            try:
-                body,kind=await asyncio.to_thread(verified_download,route.request.url)
-                await route.fulfill(status=200,body=body,content_type=kind,headers={'access-control-allow-origin':'*','cross-origin-resource-policy':'cross-origin'})
-            except Exception as e:
-                print('CDN transport error:',route.request.url,str(e),flush=True);await route.abort()
-        await context.route('https://cdn.jsdelivr.net/pyodide/**',bridge)
+        base=os.environ.get('APP_URL','http://127.0.0.1:5173')
+        origin=urlsplit(base).netloc
+        foreign_requests=[]
+        async def same_origin_only(route):
+            url=urlsplit(route.request.url)
+            if url.scheme in ('http','https') and url.netloc!=origin:
+                foreign_requests.append(route.request.url)
+                await route.abort()
+            else:
+                await route.continue_()
+        await context.route('**/*',same_origin_only)
         page=await context.new_page()
         page_errors=[]
         page.on('pageerror',lambda e:page_errors.append(str(e)))
-        base=os.environ.get('APP_URL','http://127.0.0.1:5173')
         await page.goto(base,wait_until='networkidle')
         await page.wait_for_function("!document.querySelector('[data-testid=run-code]').disabled",timeout=120000)
         print('REAL RUNTIME READY:',await page.get_by_test_id('runtime-status').inner_text(),flush=True)
         await page.screenshot(path='/tmp/bigbungi-desktop.png',full_page=True)
         async def check_mobile():
             await page.set_viewport_size({'width':390,'height':844})
+            await page.wait_for_function("getComputedStyle(document.querySelector('.main-shell')).marginLeft === '0px'")
             assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth'), 'Mobile overflow'
             await page.get_by_role('button',name='문제 목록 열기').click()
             await page.wait_for_function("document.querySelector('.sidebar').getBoundingClientRect().x >= -0.1")
@@ -58,7 +58,7 @@ async def main():
             await page.screenshot(path='/tmp/bigbungi-mobile.png',full_page=True)
             print('Mobile overflow, drawer opening/closing and layout passed.',flush=True)
         if os.environ.get('BROWSER_MODE')=='mobile':
-            await check_mobile();assert not page_errors,page_errors;await browser.close();return
+            await check_mobile();assert not page_errors,page_errors;assert not foreign_requests,foreign_requests;await browser.close();return
         await page.get_by_role('tab',name='데이터').click()
         assert await page.locator('.table-scroll tbody tr').count()==8
         await page.get_by_role('tab',name='노트',exact=True).click()
@@ -125,8 +125,9 @@ async def main():
         print('Worker stop/recovery and draft preservation verified.',flush=True)
         await check_mobile()
         assert not page_errors,page_errors
+        assert not foreign_requests,foreign_requests
         await browser.close()
-        print(f'{expected} browser reference executions, grading, data preview, notes, errors, worker stop and mobile layout passed.',flush=True)
+        print(f'{expected} browser reference executions, grading, data preview, notes, errors, worker stop and mobile layout passed with zero external HTTP requests.',flush=True)
 
 
 if __name__=='__main__':asyncio.run(main())

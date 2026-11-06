@@ -89,7 +89,7 @@ API 키·모델은 로그인 비밀번호에서 파생된 서버 비밀값으로
 
 React + CodeMirror + Vite의 **정적 사이트**입니다. Python 3.12(Pyodide)는 Web Worker 안에서 실행되므로 사용자 코드가 서버나 개발 환경에서 실행되지 않습니다. Python 풀이와 채점은 API 키 없이 작동하며, 선택 기능인 Gemini 튜터에만 개인 키가 필요합니다. 로그인·기록 저장·Gemini 설정 암호화 보관에는 Cloudflare Worker와 D1을 사용합니다.
 
-첫 접속에는 jsDelivr에서 Python 런타임과 pandas·NumPy를 다운로드합니다. scipy·scikit-learn·statsmodels·matplotlib는 코드의 import에 따라 추가 로드됩니다. 첫 실행에는 인터넷이 필요하며 이후 브라우저 캐시를 활용합니다. multiprocessing·임의의 네이티브 패키지·서버 파일 접근은 지원하지 않습니다. 각 실행은 새로운 풀이 네임스페이스와 새로운 `data/` 작업 폴더를 사용합니다.
+Python 런타임과 모든 기본 패키지는 현재 사이트의 `pyodide/0.27.7/`에서 제공합니다. pandas·NumPy는 초기화 때, scipy·scikit-learn·statsmodels·matplotlib는 코드의 import에 따라 같은 도메인에서 추가 로드됩니다. 실행 환경을 받기 위해 외부 CDN이나 PyPI에 접속하지 않습니다. 첫 실행에는 사이트 접속이 필요하며 이후 브라우저 캐시를 활용합니다. multiprocessing·임의의 네이티브 패키지·서버 파일 접근은 지원하지 않습니다. 각 실행은 새로운 풀이 네임스페이스와 새로운 `data/` 작업 폴더를 사용합니다.
 
 데이터와 문제는 고정 시드로 직접 생성한 합성 자료이며 실제 응시자의 정보나 원본 기출 데이터는 포함하지 않습니다. 공개된 최근 기출 복원 자료의 유형·문제 형식만 참고했습니다. 공식 기출문제나 공식 채점 시스템이 아닙니다.
 
@@ -110,6 +110,8 @@ cd web
 npm ci
 npm run dev -- --port 5173
 ```
+
+`npm run dev`와 `npm run build`는 먼저 `bigbungi/runtime_assets.py`로 실행 환경을 준비합니다. 버전·SHA-256을 고정한 Pyodide 실행 파일, 필수 패키지 21개와 라이선스 약 86MiB를 빌드 시 다운로드하고 검증한 뒤 `web/public/pyodide/0.27.7/`에 복사합니다. 캐시는 `.runtime/pyodide/`에 보관하며, 캐시와 배포 폴더 모두 해시를 검사합니다. 바이너리는 Git에 커밋하지 않습니다. 패키지 인덱스는 배포하는 패키지와 의존성만 포함하므로, 그 외 패키지는 별도 추가 배포가 필요합니다. `web/pyodide-manifest.json`에서 고정 버전·출처·해시를 관리하고, GitHub Actions가 같은 배포 파일을 Pages에 업로드합니다. 검증된 캐시만으로 재생성하려면 `python -m bigbungi.runtime_assets --offline`을 실행합니다. 사이트를 프로젝트 하위 경로에 배포해도 Worker 기준 상대 경로를 사용합니다. Worker URL에는 소스 해시를 붙여 이전 CDN 로더가 브라우저 캐시에 남는 것을 방지합니다.
 
 `bigbungi.prepare`는 CSV, 정답, 해설, 미리보기를 `web/public/content/`에 생성합니다. 소스가 달라질 때만 재생성하며 `--force`로 강제로 갱신할 수 있습니다. 기준 정답은 반올림된 실제 배포 CSV를 읽어 다시 계산합니다. 생성 파일은 Git에 넣지 않고 배포 시 재현합니다.
 
@@ -134,7 +136,7 @@ CHROMIUM_PATH=/usr/bin/chromium .venv/bin/python tests/browser_editor.py
 APP_URL=http://127.0.0.1:5173/ CHROMIUM_PATH=/usr/bin/chromium .venv/bin/python tests/browser_gemini.py
 ```
 
-실제 WebAssembly Python에서 50개 기준 풀이를 실행하고 채점하며 오류·DataFrame·그래프·중지·자동 저장·모바일 탐색을 검증합니다. 클라우드 프록시의 CA를 Chromium이 신뢰하지 않는 경우 테스트는 Python의 검증된 TLS 전송으로 CDN만 연결합니다. TLS 및 Pyodide 패키지 해시 검증은 유지합니다.
+실제 WebAssembly Python에서 50개 기준 풀이를 실행하고 채점하며 오류·DataFrame·그래프·중지·자동 저장·모바일 탐색을 검증합니다. `browser_smoke.py`는 다른 도메인의 HTTP 요청을 모두 차단하고, 실행 중 외부 요청이 없었는지도 검사합니다. 패키지 다운로드는 사이트 자체에서 이루어지고, 빌드와 Pyodide 런타임의 해시 검증을 유지합니다.
 
 Gemini 테스트는 Google의 HTTP 응답을 모의 처리하고 실제 Python 오류를 컨텍스트에 넣어 검증합니다. 유효한 개인 키가 없는 개발 환경에서는 실제 Gemini 답변 생성까지 검증했다고 간주하지 않습니다.
 

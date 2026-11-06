@@ -38,6 +38,11 @@ jobs:
         working-directory: sync
       - run: npm test
         working-directory: sync
+      - name: Cache verified Python runtime assets
+        uses: actions/cache@v4
+        with:
+          path: .runtime/pyodide
+          key: pyodide-${{ hashFiles('web/pyodide-manifest.json') }}
       - name: Deploy personal record storage when configured
         id: sync
         working-directory: sync
@@ -123,6 +128,17 @@ jobs:
                   const asset = await fetch(endpoint(path), options());
                   if (!asset.ok) throw new Error('Missing application asset: ' + path);
                 }
+                const worker = await (await fetch(endpoint('python-worker.js?v=' + context.sha), options())).text();
+                if (worker.includes('cdn.jsdelivr.net')) throw new Error('Python worker still depends on an external CDN');
+                const runtimeBase = 'pyodide/0.27.7/';
+                const manifest = await (await fetch(endpoint(runtimeBase + 'manifest.json'), options())).json();
+                const required = ['numpy', 'pandas', 'scipy', 'scikit-learn', 'statsmodels', 'matplotlib'];
+                if (manifest.version !== '0.27.7' || required.some(name => !manifest.packages.includes(name))) throw new Error('Incomplete bundled Python runtime');
+                for (const file of manifest.files) {
+                  const response = await fetch(endpoint(runtimeBase + file.name), {method: 'HEAD', ...options()});
+                  if (!response.ok) throw new Error('Missing same-origin Python file: ' + file.name);
+                }
+                core.notice('PYTHON VERIFIED: same-origin runtime and ' + manifest.packages.length + ' packages available without a CDN');
                 core.notice('LIVE VERIFIED: HTTPS 200, application assets, Python worker, and 50 exercises (30/10/10) at ' + origin);
                 await core.summary.addHeading('BigBunGi is live').addLink(origin, origin)
                   .addRaw('\n\nHTTPS, built assets, Python worker and all 50 exercise entries verified.\n').write();

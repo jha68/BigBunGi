@@ -8,6 +8,7 @@ sync/node_modules/
 sync/.wrangler/
 web/dist/
 web/public/content/
+web/public/pyodide/
 playwright-report/
 test-results/
 tests/fixtures/

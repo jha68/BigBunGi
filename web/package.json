@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
+    "predev": "python ../bigbungi/runtime_assets.py",
     "dev": "vite --host 0.0.0.0",
+    "prebuild": "python ../bigbungi/runtime_assets.py",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0"
   },
