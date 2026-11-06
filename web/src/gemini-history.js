@@ -166,6 +166,18 @@ export function createConversationStore(api, notify, delay = 2000) {
     load,
     update,
     retry,
+    snapshots: () =>
+      Object.fromEntries(
+        [...records].map(([pid, e]) => [
+          pid,
+          {
+            turns: e.turns,
+            unsaved: dirty(e),
+            clearing: !!e.clearing,
+            dirtyTurns: [...e.dirty.values()],
+          },
+        ]),
+      ),
     flushAll: async () => {
       for (const [pid, e] of records) {
         if (e.running) await e.running;

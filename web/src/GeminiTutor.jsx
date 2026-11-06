@@ -38,6 +38,7 @@ import { withKeyFallback } from "./gemini-failover.js";
 import "./gemini.css";
 import { createSettingsStore } from "./gemini-settings.js";
 import { createConversationStore } from "./gemini-history.js";
+import { makeStudyContext, STUDY_PROMPTS } from "./study-context.js";
 
 const TutorContext = createContext(null);
 
@@ -90,6 +91,7 @@ export function GeminiProvider({
     [settingsApi],
   );
   const [pending, setPending] = useState(null);
+  const [studyCoverage, setStudyCoverage] = useState("");
   const [noteGenerations, setNoteGenerations] = useState({});
   const [noteInstructions, setNoteInstructions] = useState({});
   const activeKey = useRef(""),
@@ -343,6 +345,7 @@ export function GeminiProvider({
     question,
     includeExecution,
     retryId,
+    studyData,
   }) {
     if (request.current || connection.status !== "ready") return;
     if (!historyStore.ready(problem.id))
@@ -383,9 +386,56 @@ export function GeminiProvider({
     request.current = controller;
     setPending({ pid, id });
     try {
+      if (studyData) {
+        let records = null,
+          loadError = "";
+        let currentData = {
+          ...studyData,
+          serverEnabled: !!settingsApi,
+          noteSource: "current-browser",
+        };
+        if (settingsApi) {
+          const [historyResult, stateResult] = await Promise.allSettled([
+            settingsApi("/conversations"),
+            settingsApi("/state"),
+          ]);
+          if (historyResult.status === "fulfilled")
+            records = historyResult.value;
+          else loadError = historyResult.reason.message;
+          if (
+            stateResult.status === "fulfilled" &&
+            stateResult.value.state &&
+            studyData.syncStatus === "saved"
+          ) {
+            const saved = stateResult.value.state;
+            currentData = {
+              ...currentData,
+              notes: saved.notes || {},
+              highlights: saved.highlights || {},
+              progress: saved.progress || {},
+              noteSource: "server",
+            };
+          } else if (stateResult.status === "rejected") {
+            currentData.notesLoadError = stateResult.reason.message;
+          }
+        }
+        controller.signal.throwIfAborted();
+        context = makeStudyContext(
+          currentData,
+          records,
+          historyStore.snapshots(),
+          question,
+          loadError,
+        );
+        const coverage = context.coverage;
+        setStudyCoverage(
+          `${coverage.totalProblems}문제의 노트·강조·질문 이력을 참고합니다.${coverage.truncated.length ? " 일부 긴 내용은 길이 제한으로 생략됐습니다." : ""}${coverage.loadError || coverage.unavailable.length ? " 일부 질문 이력을 불러오지 못해 이력 조회 범위가 제한됩니다." : ""}${coverage.notesLoadError ? " 노트는 현재 브라우저에 남아 있는 기록을 사용합니다." : ""}`,
+        );
+      }
       const response = await requestWithKeys(
         {
           model,
+          task: studyData ? "study" : "chat",
           context,
           question,
           history,
@@ -500,6 +550,7 @@ export function GeminiProvider({
         retrySettings: () =>
           store?.hasIntent ? store.retry() : restoreSettings(),
         turns,
+        studyCoverage,
         historyStore,
         conversationStates,
         drafts,
@@ -566,7 +617,10 @@ export function GeminiNoteGenerator({
         이 문제의 질문·답변 {count}개를 질문 한 줄·답변 한 문장과 핵심 코드
         1~3줄로 짧게 요약합니다. 추가 요청이 있으면 함께 반영합니다.
       </p>
-      <label className="note-ai-instructions" htmlFor={`note-instructions-${problem.id}`}>
+      <label
+        className="note-ai-instructions"
+        htmlFor={`note-instructions-${problem.id}`}
+      >
         노트 생성 요청 (선택사항)
         <textarea
           id={`note-instructions-${problem.id}`}
@@ -574,10 +628,12 @@ export function GeminiNoteGenerator({
           maxLength={2000}
           placeholder="예: Z-score 공식과 ddof의 차이를 포함해 줘."
           value={instructions}
-          onChange={(event) => tutor.setNoteInstructions((previous) => ({
-            ...previous,
-            [problem.id]: event.target.value,
-          }))}
+          onChange={(event) =>
+            tutor.setNoteInstructions((previous) => ({
+              ...previous,
+              [problem.id]: event.target.value,
+            }))
+          }
         />
       </label>
       {ready ? (
@@ -653,8 +709,11 @@ export function GeminiTutor({
   hidden,
   expanded = false,
   onExpandedChange,
+  studyData,
+  onSelectProblem,
 }) {
   const tutor = useContext(TutorContext);
+  const isStudy = !!studyData;
   const [settingsOpen, setSettingsOpen] = useState(false),
     [contextOpen, setContextOpen] = useState(false);
   const [includeExecution, setIncludeExecution] = useState(true),
@@ -705,6 +764,7 @@ export function GeminiTutor({
       question,
       includeExecution,
       retryId,
+      studyData,
     });
     if (error) setFormError(error);
   }
@@ -717,7 +777,7 @@ export function GeminiTutor({
           <Sparkles size={17} />
         </span>
         <div>
-          <strong>Gemini 튜터</strong>
+          <strong>{isStudy ? "전체 학습 AI" : "Gemini 튜터"}</strong>
           <small className={ready ? "gemini-selected-model" : ""}>
             {ready ? (
               <>
@@ -736,6 +796,8 @@ export function GeminiTutor({
                   {freeTierLabel(tutor.model, tutor.access)}
                 </span>
               </>
+            ) : isStudy ? (
+              "문제별 질문·노트·형광펜을 함께 보는 AI"
             ) : (
               "내 문제와 코드를 함께 보는 AI"
             )}
@@ -744,16 +806,18 @@ export function GeminiTutor({
         <span className={`gemini-status ${ready ? "ready" : ""}`}>
           {ready ? "연결됨" : "키 연결 필요"}
         </span>
-        <button
-          className="gemini-expand-toggle"
-          aria-label={expanded ? "AI 대화 축소" : "AI 대화 확대"}
-          title={expanded ? "대화 축소 (Esc)" : "문제 패널 전체로 대화 확대"}
-          aria-expanded={expanded}
-          aria-controls={`gemini-messages-${problem.id}`}
-          onClick={() => onExpandedChange?.(!expanded)}
-        >
-          {expanded ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
-        </button>
+        {!isStudy && (
+          <button
+            className="gemini-expand-toggle"
+            aria-label={expanded ? "AI 대화 축소" : "AI 대화 확대"}
+            title={expanded ? "대화 축소 (Esc)" : "문제 패널 전체로 대화 확대"}
+            aria-expanded={expanded}
+            aria-controls={`gemini-messages-${problem.id}`}
+            onClick={() => onExpandedChange?.(!expanded)}
+          >
+            {expanded ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+          </button>
+        )}
         <button
           aria-label="Gemini 연결 설정"
           title="연결 설정"
@@ -762,11 +826,19 @@ export function GeminiTutor({
           <Settings2 size={15} />
         </button>
         <button
-          aria-label="이 문제의 AI 대화 지우기"
-          title="이 문제의 대화 지우기"
+          aria-label={
+            isStudy ? "홈 AI 대화 지우기" : "이 문제의 AI 대화 지우기"
+          }
+          title={isStudy ? "홈 AI 대화 지우기" : "이 문제의 대화 지우기"}
           disabled={busy || !currentTurns.length}
           onClick={() => {
-            if (confirm("이 문제의 AI 대화를 지울까요?"))
+            if (
+              confirm(
+                isStudy
+                  ? "홈 AI 대화만 지울까요? 문제별 대화는 유지됩니다."
+                  : "이 문제의 AI 대화를 지울까요?",
+              )
+            )
               tutor.clear(problem.id);
           }}
         >
@@ -952,24 +1024,38 @@ export function GeminiTutor({
           onClick={() => setContextOpen((value) => !value)}
         >
           <span className="context-dot" />
-          현재 문제 + 최신 코드 {code.split("\n").length}줄 첨부
+          {isStudy ? (
+            "전체 문제의 질문 기록 · 노트 · 형광펜 참고"
+          ) : (
+            <>현재 문제 + 최신 코드 {code.split("\n").length}줄 첨부</>
+          )}
           {contextOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
         </button>
       </div>
       {contextOpen && (
         <div className="gemini-context-detail">
           <strong>{problem.title}</strong>
-          <p>수행 조건 · 변수 설명 · 데이터 미리보기 · 현재 코드</p>
-          <label>
-            <input
-              type="checkbox"
-              checked={includeExecution}
-              onChange={(e) => setIncludeExecution(e.target.checked)}
-            />
-            최근 실행 결과·오류도 첨부
-            {result && result.code !== code && <em>이전 코드의 실행 결과</em>}
-          </label>
-          <small>전체 CSV와 기준 풀이·정답 키는 보내지 않습니다.</small>
+          <p>
+            {isStudy
+              ? "전송할 때마다 최신 노트·강조 내용과 저장된 문제별 질문 이력을 조회합니다. 전체 코드는 보내지 않습니다."
+              : "수행 조건 · 변수 설명 · 데이터 미리보기 · 현재 코드"}
+          </p>
+          {!isStudy && (
+            <>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={includeExecution}
+                  onChange={(e) => setIncludeExecution(e.target.checked)}
+                />
+                최근 실행 결과·오류도 첨부
+                {result && result.code !== code && (
+                  <em>이전 코드의 실행 결과</em>
+                )}
+              </label>
+              <small>전체 CSV와 기준 풀이·정답 키는 보내지 않습니다.</small>
+            </>
+          )}
         </div>
       )}
       <div
@@ -977,24 +1063,35 @@ export function GeminiTutor({
         id={`gemini-messages-${problem.id}`}
         ref={messages}
         role="log"
-        aria-label="이 문제의 AI 대화"
+        aria-label={isStudy ? "전체 학습 AI 대화" : "이 문제의 AI 대화"}
         aria-live="polite"
       >
         {!currentTurns.length && (
           <div className="gemini-empty">
             <Bot size={27} />
-            <strong>어디에서 막혔나요?</strong>
+            <strong>
+              {isStudy
+                ? "학습 기록을 함께 정리해 볼까요?"
+                : "어디에서 막혔나요?"}
+            </strong>
             <p>
-              질문할 때마다 지금 작성한 코드와
+              {isStudy
+                ? "문제별 AI 질문 이력과 노트,"
+                : "질문할 때마다 지금 작성한 코드와"}
               <br />
-              현재 문제를 함께 읽고 답해 드려요.
+              {isStudy
+                ? "형광펜으로 강조한 내용을 참고합니다."
+                : "현재 문제를 함께 읽고 답해 드려요."}
             </p>
             <div>
-              {[
-                "정답 말고 다음 단계 힌트만 줘",
-                "내 코드의 오류 원인을 알려줘",
-                "문제 조건을 놓친 부분이 있어?",
-              ].map((question) => (
+              {(isStudy
+                ? STUDY_PROMPTS
+                : [
+                    "정답 말고 다음 단계 힌트만 줘",
+                    "내 코드의 오류 원인을 알려줘",
+                    "문제 조건을 놓친 부분이 있어?",
+                  ]
+              ).map((question) => (
                 <button
                   key={question}
                   onClick={() => {
@@ -1013,7 +1110,11 @@ export function GeminiTutor({
             <div className="gemini-question">
               <p>{turn.question}</p>
               <small>
-                문제 + 코드 {turn.contextLines}줄
+                {isStudy ? (
+                  "전체 학습 기록 참고"
+                ) : (
+                  <>문제 + 코드 {turn.contextLines}줄</>
+                )}
                 {turn.withExecution ? " + 실행 결과" : ""}
               </small>
             </div>
@@ -1030,7 +1131,9 @@ export function GeminiTutor({
                   </span>
                 )}
               </span>
-              {turn.answer && <Answer text={turn.answer} />}
+              {turn.answer && (
+                <Answer text={turn.answer} onSelectProblem={onSelectProblem} />
+              )}
               {turn.retryError && turn.status === "complete" && (
                 <details className="gemini-key-retry">
                   <summary>{turn.keyNumber}번 API 키로 재시도했습니다.</summary>
@@ -1067,6 +1170,9 @@ export function GeminiTutor({
           submit();
         }}
       >
+        {isStudy && tutor.studyCoverage && (
+          <p className="gemini-study-coverage">{tutor.studyCoverage}</p>
+        )}
         {tutor.settingsEnabled && (
           <div
             className={`gemini-history-status ${conversation.state}`}
@@ -1158,7 +1264,9 @@ export function GeminiTutor({
             maxLength={4000}
             placeholder={
               ready
-                ? "현재 문제나 코드에 대해 질문하세요…"
+                ? isStudy
+                  ? "학습 기록·노트·강조한 내용에 대해 질문하세요…"
+                  : "현재 문제나 코드에 대해 질문하세요…"
                 : "키를 연결한 뒤 질문을 보내세요…"
             }
             value={draft}

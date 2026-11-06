@@ -54,6 +54,7 @@ test("record comparison tolerates ordering but preserves cleared code, notes and
     "drafts",
     "answers",
     "notes",
+    "highlights",
     "progress",
     "selected",
   ]);

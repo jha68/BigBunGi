@@ -336,6 +336,7 @@ async def main():
         await page.wait_for_selector('[data-testid=grade-result].retry')
         assert "소수 3자리까지 반올림해 제출하세요." in await page.get_by_test_id("grade-result").inner_text()
         await page.set_viewport_size({"width": 390, "height": 844})
+        await page.wait_for_function("getComputedStyle(document.querySelector('.main-shell')).marginLeft === '0px'")
         assert await page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         await page.screenshot(path="/tmp/bigbungi-rounding-feedback-mobile.png", full_page=True)
         await page.set_viewport_size({"width": 1512, "height": 1080})

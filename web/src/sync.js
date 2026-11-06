@@ -54,6 +54,7 @@ export function normalizeState(value = {}) {
     drafts: value.drafts || {},
     answers: value.answers || {},
     notes: value.notes || {},
+    highlights: value.highlights || {},
     progress: value.progress || {},
     selected: value.selected || "t1-01",
   };
@@ -75,7 +76,7 @@ export function sameState(a, b) {
   );
 }
 export function hasRecords(value) {
-  return ["drafts", "answers", "notes", "progress"].some(
+  return ["drafts", "answers", "notes", "highlights", "progress"].some(
     (key) => Object.keys(value?.[key] || {}).length > 0,
   );
 }

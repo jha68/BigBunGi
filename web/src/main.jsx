@@ -19,6 +19,7 @@ import {
   FileSpreadsheet,
   Flag,
   FlaskConical,
+  Home,
   Lightbulb,
   Loader2,
   Maximize2,
@@ -39,6 +40,7 @@ import {
 import CodeEditor from "./CodeEditor.jsx";
 import { GeminiProvider, GeminiTutor } from "./GeminiTutor.jsx";
 import PracticeNotes from "./PracticeNotes.jsx";
+import HomeScreen from "./HomeScreen.jsx";
 import { gradeNumeric, gradePrediction } from "./grading.js";
 import SyncGate, { SyncStatus } from "./SyncGate.jsx";
 import "./styles.css";
@@ -165,10 +167,12 @@ function App({ initialState = initial, onStateChange, syncControls }) {
   const [drafts, setDrafts] = useState(initialState.drafts || {}),
     [answers, setAnswers] = useState(initialState.answers || {}),
     [notes, setNotes] = useState(initialState.notes || {}),
+    [highlights, setHighlights] = useState(initialState.highlights || {}),
     [progress, setProgress] = useState(initialState.progress || {});
   const [leftTab, setLeftTab] = useState("problem"),
     [bottomTab, setBottomTab] = useState("output");
   const [aiExpanded, setAiExpanded] = useState(false);
+  const [homeMode, setHomeMode] = useState("overview");
   const [retryProblem, setRetryProblem] = useState(null);
   const [solutions, setSolutions] = useState({}),
     [hintCount, setHintCount] = useState({}),
@@ -223,19 +227,29 @@ function App({ initialState = initial, onStateChange, syncControls }) {
     toastTimer.current = setTimeout(() => setToast(""), 5000);
   }, []);
   const terminateRun = useRef(null);
-  const problemBody = useRef(null), shortcutFocus = useRef(false);
+  const problemBody = useRef(null),
+    shortcutFocus = useRef(false);
 
   useEffect(() => {
     const switchQuestionTab = (event) => {
       if (
-        !problem || !event.altKey || event.ctrlKey || event.metaKey || event.shiftKey ||
-        event.code !== "KeyQ" || event.isComposing || event.keyCode === 229 ||
-        event.repeat || event.defaultPrevented || document.querySelector("dialog[open]")
-      ) return;
+        !problem ||
+        !event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey ||
+        event.code !== "KeyQ" ||
+        event.isComposing ||
+        event.keyCode === 229 ||
+        event.repeat ||
+        event.defaultPrevented ||
+        document.querySelector("dialog[open]")
+      )
+        return;
       event.preventDefault();
       shortcutFocus.current = true;
       setAiExpanded(false);
-      setLeftTab((tab) => tab === "ai" ? "problem" : "ai");
+      setLeftTab((tab) => (tab === "ai" ? "problem" : "ai"));
     };
     document.addEventListener("keydown", switchQuestionTab);
     return () => document.removeEventListener("keydown", switchQuestionTab);
@@ -244,9 +258,12 @@ function App({ initialState = initial, onStateChange, syncControls }) {
   useEffect(() => {
     if (!shortcutFocus.current) return;
     shortcutFocus.current = false;
-    const target = leftTab === "ai"
-      ? problemBody.current?.querySelector('textarea[aria-label="Gemini에게 질문"]')
-      : problemBody.current;
+    const target =
+      leftTab === "ai"
+        ? problemBody.current?.querySelector(
+            'textarea[aria-label="Gemini에게 질문"]',
+          )
+        : problemBody.current;
     target?.focus();
   }, [leftTab]);
 
@@ -275,6 +292,10 @@ function App({ initialState = initial, onStateChange, syncControls }) {
     setFileIndex(0);
     setLeftTab("problem");
     setAiExpanded(false);
+    if (selected === "home")
+      return () => {
+        live = false;
+      };
     jsonFile(`content/problems/${selected}.json`)
       .then((p) => {
         if (live) setProblem(p);
@@ -299,15 +320,31 @@ function App({ initialState = initial, onStateChange, syncControls }) {
     try {
       localStorage.setItem(
         STORAGE,
-        JSON.stringify({ drafts, answers, notes, progress, selected }),
+        JSON.stringify({
+          drafts,
+          answers,
+          notes,
+          highlights,
+          progress,
+          selected,
+        }),
       );
     } catch {
       notify(
         "브라우저 저장 공간이 부족해 자동 저장하지 못했습니다. 코드를 다운로드해 주세요.",
       );
     }
-    onStateChange?.({ drafts, answers, notes, progress, selected });
-  }, [drafts, answers, notes, progress, selected, notify, onStateChange]);
+    onStateChange?.({ drafts, answers, notes, highlights, progress, selected });
+  }, [
+    drafts,
+    answers,
+    notes,
+    highlights,
+    progress,
+    selected,
+    notify,
+    onStateChange,
+  ]);
 
   const startWorker = useCallback(() => {
     worker.current?.terminate();
@@ -315,7 +352,9 @@ function App({ initialState = initial, onStateChange, syncControls }) {
     runMeta.current = null;
     setRunning(null);
     setRuntime({ ready: false, message: "Python 실행 환경 준비 중…" });
-    const w = new Worker(BASE + "python-worker.js?v=" + __PYTHON_WORKER_VERSION__);
+    const w = new Worker(
+      BASE + "python-worker.js?v=" + __PYTHON_WORKER_VERSION__,
+    );
     worker.current = w;
     timeout.current = setTimeout(() => {
       w.terminate();
@@ -420,14 +459,17 @@ function App({ initialState = initial, onStateChange, syncControls }) {
     startWorker();
   };
   useEffect(() => {
-    startWorker();
+    if (selected !== "home" && !worker.current) startWorker();
+  }, [selected === "home", startWorker]);
+  useEffect(() => {
     return () => {
       worker.current?.terminate();
       clearTimeout(timeout.current);
     };
-  }, [startWorker]);
+  }, []);
 
   function select(id) {
+    setNavOpen(false);
     if (id === selected) {
       if (problem && (progress[id]?.passed || progress[id]?.attempts > 0))
         setRetryProblem(problem);
@@ -436,7 +478,6 @@ function App({ initialState = initial, onStateChange, syncControls }) {
     setRetryProblem(null);
     setSelected(id);
     history.replaceState(null, "", "#" + id);
-    setNavOpen(false);
   }
   async function runCode() {
     const p = problemRef.current;
@@ -605,12 +646,13 @@ function App({ initialState = initial, onStateChange, syncControls }) {
         </button>
         <a
           className="brand"
-          href="#t1-01"
+          href="#home"
           onClick={(e) => {
             e.preventDefault();
-            select("t1-01");
+            select("home");
+            setHomeMode("overview");
           }}
-          aria-label="빅분기 첫 문제"
+          aria-label="빅분기 홈"
         >
           <span className="brand-mark">
             <span />
@@ -627,6 +669,15 @@ function App({ initialState = initial, onStateChange, syncControls }) {
           나의 실기 연습실 <Badge tone="muted">BETA</Badge>
         </div>
         <div className="type-nav">
+          <button
+            className={`sidebar-home ${selected === "home" ? "active" : ""}`}
+            onClick={() => {
+              select("home");
+              setHomeMode("overview");
+            }}
+          >
+            <Home size={17} /> 학습 홈
+          </button>
           {[1, 2, 3].map((type) => {
             const Icon = TYPE_INFO[type].icon;
             const passed = catalog.filter(
@@ -635,7 +686,7 @@ function App({ initialState = initial, onStateChange, syncControls }) {
             return (
               <button
                 key={type}
-                className={`type-button ${kind === type ? "active" : ""}`}
+                className={`type-button ${selected !== "home" && kind === type ? "active" : ""}`}
                 onClick={() =>
                   select(
                     catalog.find((p) => p.type === type)?.id || `t${type}-01`,
@@ -655,49 +706,53 @@ function App({ initialState = initial, onStateChange, syncControls }) {
             );
           })}
         </div>
-        <div className="question-list-heading">
-          <span>문제 목록</span>
-          <span>{typeCounts[kind]}문제</span>
-        </div>
-        <div className="search-field">
-          <Search size={14} />
-          <input
-            aria-label="문제 검색"
-            placeholder="제목 또는 키워드 검색"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          {search && (
-            <button aria-label="검색 지우기" onClick={() => setSearch("")}>
-              <X size={12} />
-            </button>
-          )}
-        </div>
-        <nav className="question-list" aria-label="문제 목록">
-          {visible.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => select(p.id)}
-              className={`question-link ${selected === p.id ? "selected" : ""}`}
-              aria-current={selected === p.id ? "page" : undefined}
-            >
-              <span className="question-number">
-                {String(p.number).padStart(2, "0")}
-              </span>
-              <span className="question-name">{p.title}</span>
-              {progress[p.id]?.passed ? (
-                <CheckCircle2 size={14} className="solved-icon" />
-              ) : selected === p.id ? (
-                <span className="current-dot" />
-              ) : (
-                <Circle size={12} className="pending-icon" />
+        {selected !== "home" && (
+          <>
+            <div className="question-list-heading">
+              <span>문제 목록</span>
+              <span>{typeCounts[kind]}문제</span>
+            </div>
+            <div className="search-field">
+              <Search size={14} />
+              <input
+                aria-label="문제 검색"
+                placeholder="제목 또는 키워드 검색"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              {search && (
+                <button aria-label="검색 지우기" onClick={() => setSearch("")}>
+                  <X size={12} />
+                </button>
               )}
-            </button>
-          ))}
-          {!visible.length && (
-            <p className="no-search">검색 결과가 없습니다.</p>
-          )}
-        </nav>
+            </div>
+            <nav className="question-list" aria-label="문제 목록">
+              {visible.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => select(p.id)}
+                  className={`question-link ${selected === p.id ? "selected" : ""}`}
+                  aria-current={selected === p.id ? "page" : undefined}
+                >
+                  <span className="question-number">
+                    {String(p.number).padStart(2, "0")}
+                  </span>
+                  <span className="question-name">{p.title}</span>
+                  {progress[p.id]?.passed ? (
+                    <CheckCircle2 size={14} className="solved-icon" />
+                  ) : selected === p.id ? (
+                    <span className="current-dot" />
+                  ) : (
+                    <Circle size={12} className="pending-icon" />
+                  )}
+                </button>
+              ))}
+              {!visible.length && (
+                <p className="no-search">검색 결과가 없습니다.</p>
+              )}
+            </nav>
+          </>
+        )}
         <div className="sidebar-bottom">
           <div className="progress-caption">
             <span>차곡차곡, 나의 학습 기록</span>
@@ -749,7 +804,13 @@ function App({ initialState = initial, onStateChange, syncControls }) {
             </button>
             <span>실기 연습실</span>
             <ChevronRight size={14} />
-            <strong>작업형 {kind}유형</strong>
+            <strong>
+              {selected === "home"
+                ? homeMode === "ai"
+                  ? "전체 학습 AI"
+                  : "학습 홈"
+                : `작업형 ${kind}유형`}
+            </strong>
           </div>
           <div className="topbar-right">
             {syncControls ? (
@@ -776,6 +837,20 @@ function App({ initialState = initial, onStateChange, syncControls }) {
             <strong>{fetchError}</strong>
             <button onClick={() => location.reload()}>다시 불러오기</button>
           </div>
+        ) : selected === "home" ? (
+          <HomeScreen
+            syncStatus={syncControls?.status || "local"}
+            catalog={catalog}
+            notes={notes}
+            highlights={highlights}
+            progress={progress}
+            mode={homeMode}
+            onModeChange={setHomeMode}
+            onSelect={(id) => {
+              if (catalog.some((entry) => entry.id === id)) select(id);
+              else notify("문제 목록에서 찾을 수 없는 문제입니다.");
+            }}
+          />
         ) : !problem ? (
           <div className="page-loading">
             <Loader2 className="spin" /> 문제를 불러오고 있어요
@@ -1040,6 +1115,13 @@ function App({ initialState = initial, onStateChange, syncControls }) {
                       code={currentCode}
                       result={result}
                       value={notes[problem.id] || ""}
+                      highlights={highlights[problem.id] || []}
+                      onHighlightsChange={(items) =>
+                        setHighlights((previous) => ({
+                          ...previous,
+                          [problem.id]: items,
+                        }))
+                      }
                       onChange={(text) =>
                         setNotes((previous) => ({
                           ...previous,

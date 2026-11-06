@@ -38,13 +38,34 @@ const components = {
   },
 };
 
-export default memo(function Markdown({ text }) {
+export default memo(function Markdown({ text, onSelectProblem }) {
+  const renderers = onSelectProblem
+    ? {
+        ...components,
+        a({ href, children }) {
+          const match = /^#(t[123]-\d{2})$/.exec(href || "");
+          return match ? (
+            <a
+              href={href}
+              onClick={(event) => {
+                event.preventDefault();
+                onSelectProblem(match[1]);
+              }}
+            >
+              {children}
+            </a>
+          ) : (
+            components.a({ href, children })
+          );
+        },
+      }
+    : components;
   return (
     <div className="gemini-markdown">
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[[rehypeKatex, { trust: false }]]}
-        components={components}
+        components={renderers}
         skipHtml
       >
         {text}

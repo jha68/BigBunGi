@@ -187,9 +187,20 @@ async function validPassword(password, record) {
 
 export function validState(state) {
   if (!state || typeof state !== "object" || Array.isArray(state)) return false;
-  const fields = ["drafts", "answers", "notes", "progress", "selected"];
+  const fields = [
+    "drafts",
+    "answers",
+    "notes",
+    "progress",
+    "selected",
+    "highlights",
+  ];
   if (Object.keys(state).some((key) => !fields.includes(key))) return false;
-  if (state.selected != null && !/^t[123]-\d{2}$/.test(state.selected))
+  if (
+    state.selected != null &&
+    state.selected !== "home" &&
+    !/^t[123]-\d{2}$/.test(state.selected)
+  )
     return false;
   for (const field of fields.slice(0, 4)) {
     const values = state[field];
@@ -205,6 +216,56 @@ export function validState(state) {
       Object.values(values).some((value) => typeof value !== "string")
     )
       return false;
+  }
+  if (state.highlights !== undefined) {
+    if (
+      !state.highlights ||
+      typeof state.highlights !== "object" ||
+      Array.isArray(state.highlights) ||
+      Object.keys(state.highlights).length > 100
+    )
+      return false;
+    for (const [pid, items] of Object.entries(state.highlights)) {
+      if (
+        !/^t[123]-\d{2}$/.test(pid) ||
+        !Array.isArray(items) ||
+        items.length > 100
+      )
+        return false;
+      if (
+        items.some(
+          (item) =>
+            !item ||
+            Object.keys(item).some(
+              (key) =>
+                ![
+                  "id",
+                  "text",
+                  "quote",
+                  "start",
+                  "before",
+                  "after",
+                  "noteHash",
+                ].includes(key),
+            ) ||
+            typeof item.id !== "string" ||
+            !/^[a-zA-Z0-9_-]{1,120}$/.test(item.id) ||
+            !["text", "quote", "before", "after", "noteHash"].every(
+              (key) => typeof item[key] === "string",
+            ) ||
+            item.text.length > 6000 ||
+            item.quote.length > 6000 ||
+            !item.quote.trim() ||
+            item.before.length > 64 ||
+            item.after.length > 64 ||
+            item.noteHash.length > 40 ||
+            !Number.isSafeInteger(item.start) ||
+            item.start < 0 ||
+            item.start > 1000000,
+        )
+      )
+        return false;
+    }
   }
   return true;
 }
@@ -385,7 +446,45 @@ export default {
           );
         return reply({ revision: revision + 1 });
       }
-      const conversation = /^\/conversations\/(t[123]-\d{2})$/.exec(path);
+      if (path === "/conversations" && request.method === "GET") {
+        if (!/^[a-f0-9]{64}$/.test(env.HISTORY_KEY || ""))
+          return reply(
+            { error: "AI 대화 저장소 설정이 완료되지 않았습니다." },
+            503,
+          );
+        const rows = await env.DB.prepare(
+          "SELECT id, data, updated_at FROM conversations WHERE id LIKE 't%' AND data IS NOT NULL",
+        ).all();
+        const records = [],
+          unavailable = [];
+        for (const row of rows.results) {
+          if (!/^t[123]-\d{2}$/.test(row.id)) continue;
+          try {
+            const turns = await decryptSettings(
+              row.data,
+              env.HISTORY_KEY,
+              `conversations/${row.id}`,
+            );
+            records.push({
+              id: row.id,
+              turnIds: turns.map((turn) => turn.id),
+              updatedAt: row.updated_at,
+              questions: turns
+                .slice(-5)
+                .map(({ id, question, answer, status }) => ({
+                  id,
+                  question: question.slice(0, 1000),
+                  answer: answer.slice(0, 1500),
+                  status,
+                })),
+            });
+          } catch {
+            unavailable.push(row.id);
+          }
+        }
+        return reply({ records, unavailable });
+      }
+      const conversation = /^\/conversations\/(t[123]-\d{2}|home)$/.exec(path);
       if (conversation && ["GET", "PUT"].includes(request.method)) {
         const pid = conversation[1];
         if (!/^[a-f0-9]{64}$/.test(env.HISTORY_KEY || ""))

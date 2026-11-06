@@ -401,6 +401,95 @@ test("per-problem conversations are encrypted, private, CAS protected and retain
   assert.deepEqual((await (await call(path)).json()).turns, [failed]);
 });
 
+test("study index and home chat stay private and separate; highlights survive state synchronization", async () => {
+  assert.equal(
+    (await call("/conversations", "GET", undefined, null)).status,
+    401,
+  );
+  const homeTurn = {
+    id: "home-1",
+    question: "노트를 요약해줘",
+    answer: "홈 답변",
+    error: "",
+    status: "complete",
+    model: "models/gemini-2.5-flash",
+    contextLines: 1,
+    withExecution: false,
+    at: "2026-11-06T00:00:00Z",
+  };
+  assert.equal(
+    (
+      await call("/conversations/home", "PUT", {
+        revision: 0,
+        turns: [homeTurn],
+      })
+    ).status,
+    200,
+  );
+  assert.deepEqual((await (await call("/conversations/home")).json()).turns, [
+    homeTurn,
+  ]);
+  const index = await (await call("/conversations")).json();
+  assert.equal(index.records.length, 1);
+  assert.equal(index.records[0].id, "t1-01");
+  assert.equal(index.records[0].turnIds.length, 1);
+  assert.ok(!JSON.stringify(index).includes(homeTurn.question));
+  await db
+    .prepare(
+      "INSERT INTO conversations (id,revision,data) VALUES ('t1-03',1,'corrupt')",
+    )
+    .run();
+  assert.deepEqual((await (await call("/conversations")).json()).unavailable, [
+    "t1-03",
+  ]);
+  await db.prepare("DELETE FROM conversations WHERE id='t1-03'").run();
+  const remote = await (await call("/state")).json();
+  const highlight = {
+    id: "h1",
+    text: "복습",
+    quote: "복습",
+    start: 0,
+    before: "",
+    after: "",
+    noteHash: "2:ab",
+  };
+  const updated = {
+    ...remote.state,
+    selected: "home",
+    highlights: { "t1-01": [highlight] },
+  };
+  assert.equal(
+    (await call("/state", "PUT", { revision: remote.revision, state: updated }))
+      .status,
+    200,
+  );
+  assert.deepEqual(
+    (await (await call("/state")).json()).state.highlights,
+    updated.highlights,
+  );
+  assert.equal(
+    (
+      await call("/state", "PUT", {
+        revision: remote.revision + 1,
+        state: { ...updated, highlights: { home: [highlight] } },
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await call("/state", "PUT", {
+        revision: remote.revision + 1,
+        state: {
+          ...updated,
+          highlights: { "t1-01": [{ ...highlight, start: -1 }] },
+        },
+      })
+    ).status,
+    400,
+  );
+});
+
 test("logout invalidates sessions, expired sessions are rejected, and wrong passwords are rate limited", async () => {
   assert.equal((await call("/logout", "POST", {})).status, 200);
   assert.equal((await call("/session")).status, 401);
