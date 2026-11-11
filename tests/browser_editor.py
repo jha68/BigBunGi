@@ -89,6 +89,58 @@ async def main():
             await cdp.detach()
             print("PASS: brackets/quotes pair, skip closers, delete as pairs and wrap selection; paste is preserved. Missing IME-end recovery preserves live Korean composition.", flush=True)
 
+        async def check_composed_answers(page):
+            first = '    "coefficient": model.params[\'ad_spend\'].round(3),  # ad_spend 회귀계수'
+            second = '    "pvalue": model.pvalues[\'ad_spend\'].round(6),  # ad_spend 계수의 p-value'
+            cases = [
+                ("answers = ", "{", "}", ""),
+                ("answers = {\n    ", '"', '"', "\n}"),
+                ('answers = {\n    "coefficient": model.params', "[", "]", "\n}"),
+                ('answers = {\n    "coefficient": model.params[', "'", "'", "]\n}"),
+                ('answers = {\n    "coefficient": model.params[\'ad_spend\'].round', "(", ")", "\n}"),
+                (f"answers = {{\n{first}\n    ", '"', '"', "\n}"),
+                (f'answers = {{\n{first}\n    "pvalue": model.pvalues', "[", "]", "\n}"),
+                (f'answers = {{\n{first}\n    "pvalue": model.pvalues[\'ad_spend\'].round', "(", ")", "\n}"),
+                (f"answers = {{\n{first}\n{second}\n    ", '"', '"', "\n}"),
+                (f'answers = {{\n{first}\n{second}\n    "r_squared": model.rsquared.round', "(", ")", "\n}"),
+            ]
+            cdp = await page.context.new_cdp_session(page)
+
+            async def compose(text):
+                await cdp.send("Input.imeSetComposition", {"text": text, "selectionStart": len(text), "selectionEnd": len(text)})
+                await cdp.send("Input.insertText", {"text": text})
+
+            for prefix, opening, closing, suffix in cases:
+                for use_ime in [False, True]:
+                    editor = await replace_code(page, prefix + suffix)
+                    await editor.press("Control+End")
+                    for _ in suffix:
+                        await editor.press("ArrowLeft")
+                    if use_ime:
+                        await cdp.send("Input.imeSetComposition", {"text": opening, "selectionStart": 1, "selectionEnd": 1})
+                        await expect_code(page, prefix + opening + suffix)  # No edit during active preedit.
+                        await cdp.send("Input.insertText", {"text": opening})
+                    else:
+                        await page.keyboard.type(opening)
+                    await expect_code(page, prefix + opening + closing + suffix)
+                    if use_ime:
+                        await compose(closing)
+                    else:
+                        await page.keyboard.type(closing)
+                    await expect_code(page, prefix + opening + closing + suffix)
+
+            editor = await replace_code(page, "answers = ")
+            await editor.press("ArrowLeft")
+            await editor.press("ArrowRight")  # Separate previous edits from this composition for undo.
+            await compose("{")
+            await expect_code(page, "answers = {}")
+            await editor.press("Control+z")
+            await expect_code(page, "answers = ")
+            await editor.press("Control+y")
+            await expect_code(page, "answers = {}")
+            await cdp.detach()
+            print("PASS: supplied answers dictionary pairs braces, index quotes/brackets, round() and keys after Korean comments, for both keyboard and committed IME input. Undo/redo preserves complete pairs.", flush=True)
+
         async def run_shortcut(page, editor, shortcut, marker):
             before = await editor.inner_text()
             await editor.press(shortcut)
@@ -101,6 +153,7 @@ async def main():
 
         context, page = await open_page("Win32")
         await check_brackets(page)
+        await check_composed_answers(page)
         editor = await replace_code(page, 'print("WINDOWS_CTRL_ENTER_OK")\n')
         await run_shortcut(page, editor, "Control+Enter", "WINDOWS_CTRL_ENTER_OK")
         before = await editor.inner_text()
@@ -126,6 +179,7 @@ async def main():
         assert focused["outline"] != "none", focused
         await page.screenshot(path="/tmp/bigbungi-code-selection.png", full_page=True)
         await page.get_by_role("button", name="코드 글자 크기 키우기").click()
+        await page.wait_for_function("!document.querySelector('.code-editor .cm-editor').classList.contains('cm-focused')")
         blurred = await page.locator(".code-editor .cm-selectionBackground").first.evaluate("e => getComputedStyle(e).backgroundColor")
         assert blurred == "rgb(60, 102, 153)", blurred
         print("PASS: mouse-drag selection stays clearly highlighted while focused and after blur.", flush=True)

@@ -4,6 +4,7 @@ import { EditorState, Prec } from "@codemirror/state";
 import { keymap } from "@codemirror/view";
 import { python } from "@codemirror/lang-python";
 import { oneDark } from "@codemirror/theme-one-dark";
+import { completeComposedBracket } from "./bracket-completion.js";
 
 export default function CodeEditor({
   value,
@@ -20,6 +21,9 @@ export default function CodeEditor({
   change.current = onChange;
   run.current = onRun;
   useEffect(() => {
+    let composition = null,
+      compositionVersion = 0,
+      alive = true;
     view.current = new EditorView({
       doc: value,
       extensions: [
@@ -45,6 +49,33 @@ export default function CodeEditor({
         python(),
         oneDark,
         EditorView.domEventHandlers({
+          compositionstart(_event, editor) {
+            composition = editor.state;
+            compositionVersion++;
+            return false;
+          },
+          compositionend(event, editor) {
+            const before = composition,
+              version = ++compositionVersion;
+            composition = null;
+            // Let CodeMirror flush the final IME change before comparing it
+            // with the state at compositionstart. Never edit active preedit.
+            queueMicrotask(() => {
+              if (
+                !alive ||
+                version !== compositionVersion ||
+                editor.compositionStarted
+              )
+                return;
+              const transaction = completeComposedBracket(
+                editor.state,
+                before,
+                event.data,
+              );
+              if (transaction) editor.dispatch(transaction);
+            });
+            return false;
+          },
           beforeinput(event, editor) {
             // Chrome/Edge can deliver confirmed text before compositionend
             // after Korean IME input. Close the stale DOM composition before
@@ -80,7 +111,10 @@ export default function CodeEditor({
       ],
       parent: host.current,
     });
-    return () => view.current?.destroy();
+    return () => {
+      alive = false;
+      view.current?.destroy();
+    };
   }, []);
   useEffect(() => {
     const editor = view.current;
