@@ -44,6 +44,26 @@ export default function CodeEditor({
         basicSetup,
         python(),
         oneDark,
+        EditorView.domEventHandlers({
+          beforeinput(event, editor) {
+            // Chrome/Edge can deliver confirmed text before compositionend
+            // after Korean IME input. Close the stale DOM composition before
+            // CodeMirror's bracket handler sees that text. Actual IME updates
+            // (insertCompositionText / isComposing) must remain untouched.
+            if (
+              !editor.state.readOnly &&
+              !editor.contentDOM.editContext &&
+              editor.compositionStarted &&
+              event.inputType === "insertText" &&
+              event.isComposing === false
+            ) {
+              editor.contentDOM.dispatchEvent(
+                new CompositionEvent("compositionend", { bubbles: true }),
+              );
+            }
+            return false;
+          },
+        }),
         EditorState.readOnly.of(readOnly),
         EditorView.editable.of(!readOnly),
         ...(readOnly ? [EditorView.lineWrapping] : []),

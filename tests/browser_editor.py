@@ -39,8 +39,55 @@ async def main():
             editor = page.get_by_role("textbox", name="Python 코드 편집기", exact=True)
             await editor.click()
             await editor.press("Control+a")
-            await page.keyboard.insert_text(source)
+            if source:
+                await page.keyboard.insert_text(source)
+            else:
+                await editor.press("Backspace")
             return editor
+
+        async def expect_code(page, source):
+            await page.wait_for_function(
+                "source => [...document.querySelectorAll('.code-editor .cm-line')].map(line => line.textContent).join('\\n') === source",
+                arg=source,
+            )
+
+        async def check_brackets(page):
+            for opening, closing in [("(", ")"), ("[", "]"), ("{", "}"), ("'", "'"), ('"', '"')]:
+                for stale_composition in [False, True]:
+                    editor = await replace_code(page, "")
+                    if stale_composition:
+                        # Model a missed compositionend followed by a real,
+                        # non-composing beforeinput from the browser.
+                        await editor.dispatch_event("compositionstart")
+                    await page.keyboard.type(opening)
+                    await expect_code(page, opening + closing)
+                    await editor.press("Backspace")
+                    await expect_code(page, "")
+                    await page.keyboard.type(opening + closing)
+                    await expect_code(page, opening + closing)
+
+            editor = await replace_code(page, "value")
+            await editor.press("Control+a")
+            await page.keyboard.type("(")
+            await expect_code(page, "(value)")
+            await replace_code(page, "pasted = [1, (2, 3)]")
+            await expect_code(page, "pasted = [1, (2, 3)]")
+
+            editor = await replace_code(page, "")
+            await editor.evaluate("e => { window.imeEnds = 0; e.addEventListener('compositionend', () => window.imeEnds++); }")
+            cdp = await page.context.new_cdp_session(page)
+            for syllable in ["ㅎ", "하", "한"]:
+                await cdp.send("Input.imeSetComposition", {"text": syllable, "selectionStart": 1, "selectionEnd": 1})
+                await expect_code(page, syllable)
+            assert await page.evaluate("imeEnds") == 0, "Actual Korean composition was interrupted"
+            await page.keyboard.type("[")
+            await expect_code(page, "한[]")
+            await page.keyboard.type("]")
+            await expect_code(page, "한[]")
+            assert await page.evaluate("imeEnds") == 1
+            await cdp.send("Input.imeSetComposition", {"text": "", "selectionStart": 0, "selectionEnd": 0})
+            await cdp.detach()
+            print("PASS: brackets/quotes pair, skip closers, delete as pairs and wrap selection; paste is preserved. Missing IME-end recovery preserves live Korean composition.", flush=True)
 
         async def run_shortcut(page, editor, shortcut, marker):
             before = await editor.inner_text()
@@ -53,6 +100,7 @@ async def main():
             assert await page.get_by_test_id("python-error").count() == 0
 
         context, page = await open_page("Win32")
+        await check_brackets(page)
         editor = await replace_code(page, 'print("WINDOWS_CTRL_ENTER_OK")\n')
         await run_shortcut(page, editor, "Control+Enter", "WINDOWS_CTRL_ENTER_OK")
         before = await editor.inner_text()
