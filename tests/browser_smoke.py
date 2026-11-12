@@ -59,8 +59,9 @@ async def main():
             print('Mobile overflow, drawer opening/closing and layout passed.',flush=True)
         if os.environ.get('BROWSER_MODE')=='mobile':
             await check_mobile();assert not page_errors,page_errors;assert not foreign_requests,foreign_requests;await browser.close();return
-        await page.get_by_role('tab',name='데이터').click()
-        assert await page.locator('.table-scroll tbody tr').count()==8
+        assert await page.get_by_role('tab',name='데이터').count()==0
+        assert await page.get_by_role('button',name='막혔다면 힌트 보기').count()==0
+        assert await page.locator('.problem-datasets .table-scroll tbody tr').count()==8
         await page.get_by_role('tab',name='노트',exact=True).click()
         await page.get_by_label('풀이 노트').fill('E2E: ddof 조건 확인')
         await page.reload(wait_until='networkidle')
@@ -69,8 +70,7 @@ async def main():
         await page.get_by_role('button',name='노트 편집',exact=True).click()
         assert await page.get_by_label('풀이 노트').input_value()=='E2E: ddof 조건 확인'
         await page.get_by_role('tab',name='문제',exact=True).click()
-        await page.get_by_role('button',name='막혔다면 힌트 보기').click()
-        assert await page.locator('.hint-area p').count()==1
+        assert await page.locator('.problem-datasets .table-scroll tbody tr').count()==8
 
         async def put_code(source):
             editor=page.get_by_role('textbox',name='Python 코드 편집기')

@@ -118,11 +118,11 @@ async def main():
         assert await ai_tab.get_attribute("aria-selected") == "true"
         await question_input.fill("")
         await page.keyboard.press("Alt+q")
-        await page.get_by_role("tab", name="데이터", exact=False).click()
+        await page.get_by_role("tab", name="노트", exact=True).click()
         await page.keyboard.press("Alt+q")
         assert await ai_tab.get_attribute("aria-selected") == "true"
         await page.keyboard.press("Alt+q")
-        print("PASS: Alt+Q toggles problem/AI from editor, composer and data, preserves drafts, collapses expanded chat and moves focus; modified/composing events are ignored.", flush=True)
+        print("PASS: Alt+Q toggles problem/AI from editor, composer and notes, preserves drafts, collapses expanded chat and moves focus; modified/composing events are ignored.", flush=True)
 
         async def edit(source):
             await editor.click(); await editor.press("Control+a"); await page.keyboard.insert_text(source)

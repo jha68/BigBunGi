@@ -715,41 +715,12 @@ h1 > span {
 .answer-contract > p > code {
   color: #6b9287;
 }
-.hint-area {
+.problem-datasets {
   margin-top: 23px;
-  border: 1px solid #f0e9d9;
-  background: #fffcf5;
-  border-radius: 6px;
+  min-width: 0;
 }
-.hint-area > button {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  width: 100%;
-  padding: 12px 11px;
-  text-align: left;
-  font-size: 10px;
-  color: #aa8b4f;
-}
-.hint-area > button > span {
-  flex: 1;
-}
-.hint-area small {
-  font-size: 9px;
-  color: #b8a67f;
-}
-.hint-area p {
-  margin: 0 12px;
-  padding: 10px 0;
-  border-top: 1px solid #f1e9d9;
-  color: #99825d;
-  font-size: 10px;
-  line-height: 1.9;
-}
-.hint-area p strong {
-  display: block;
-  font-size: 9px;
-  margin-bottom: 3px;
+.problem-datasets .file-switcher {
+  margin: 0 0 12px;
 }
 .problem-footer {
   border-top: 1px solid #e9edf2;
@@ -1253,31 +1224,6 @@ h1 > span {
   border-color: #c3e4d8;
   color: #398b73;
 }
-.dataset-info > strong {
-  font-size: 11px;
-  color: #738195;
-  font-weight: 500;
-  line-height: 1.7;
-}
-.dataset-info > div {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  flex-wrap: wrap;
-  margin: 11px 0 15px;
-}
-.dataset-info .badge {
-  font-size: 8px;
-  padding: 4px 6px;
-}
-.download-link {
-  margin-left: auto;
-  color: #4b9d87;
-  font-size: 9px;
-  display: flex;
-  gap: 4px;
-  align-items: center;
-}
 .table-scroll {
   overflow-x: auto;
   border: 1px solid #e7edf3;
@@ -1316,53 +1262,6 @@ tr:nth-child(even) {
 .null-value {
   color: #c29861;
   font-style: italic;
-}
-.column-title {
-  margin-top: 25px;
-}
-.column-definitions {
-  margin-top: 11px;
-}
-.column-definitions > div {
-  padding: 9px 0;
-  border-bottom: 1px solid #eff2f6;
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-.column-definitions code {
-  font-size: 10px;
-  color: #5d7c91;
-  overflow-wrap: anywhere;
-}
-.column-definitions .badge {
-  font-size: 8px;
-  padding: 3px 5px;
-}
-.column-definitions p {
-  font-size: 10px;
-  color: #95a0ae;
-  margin: 0;
-  flex-basis: 100%;
-  line-height: 1.6;
-}
-.read-example {
-  background: #f4f7fa;
-  border: 1px solid #e8edf3;
-  border-radius: 5px;
-  padding: 10px;
-  margin-top: 19px;
-  font-size: 9px;
-}
-.read-example > span {
-  display: block;
-  color: #a2acb8;
-  margin-bottom: 8px;
-}
-.read-example > code {
-  color: #6a8a9a;
-  overflow-wrap: anywhere;
 }
 .note-help {
   font-size: 11px;
@@ -2210,12 +2109,6 @@ tr:nth-child(even) {
     font-size: 11px;
   }
   .problem-footer button {
-    font-size: 11px;
-  }
-  .hint-area > button {
-    font-size: 11px;
-  }
-  .hint-area p {
     font-size: 11px;
   }
   .numeric-answers label > span {

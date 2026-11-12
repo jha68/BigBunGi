@@ -8,7 +8,6 @@ import {
   Check,
   CheckCheck,
   CheckCircle2,
-  ChevronDown,
   ChevronRight,
   Circle,
   Clock3,
@@ -175,7 +174,6 @@ function App({ initialState = initial, onStateChange, syncControls }) {
   const [homeMode, setHomeMode] = useState("overview");
   const [retryProblem, setRetryProblem] = useState(null);
   const [solutions, setSolutions] = useState({}),
-    [hintCount, setHintCount] = useState({}),
     [fileIndex, setFileIndex] = useState(0);
   const [runtime, setRuntime] = useState({
       ready: false,
@@ -635,6 +633,7 @@ function App({ initialState = initial, onStateChange, syncControls }) {
   );
   const index = catalog.findIndex((p) => p.id === selected);
   const currentAnswers = answers[selected] || {};
+  const activeFile = problem?.files[fileIndex] || problem?.files[0];
 
   return (
     <div className={`app-shell ${navCollapsed ? "sidebar-collapsed" : ""}`}>
@@ -912,15 +911,6 @@ function App({ initialState = initial, onStateChange, syncControls }) {
                   </button>
                   <button
                     role="tab"
-                    aria-selected={leftTab === "data"}
-                    className={leftTab === "data" ? "active" : ""}
-                    onClick={() => setLeftTab("data")}
-                  >
-                    <Database size={14} />
-                    데이터<span>{problem.files.length}</span>
-                  </button>
-                  <button
-                    role="tab"
                     aria-selected={leftTab === "note"}
                     className={leftTab === "note" ? "active" : ""}
                     onClick={() => setLeftTab("note")}
@@ -1015,102 +1005,38 @@ function App({ initialState = initial, onStateChange, syncControls }) {
                           </p>
                         </div>
                       )}
-                      <div className="hint-area">
-                        <button
-                          onClick={() =>
-                            setHintCount((prev) => ({
-                              ...prev,
-                              [selected]: Math.min(
-                                (prev[selected] || 0) + 1,
-                                problem.hints.length,
-                              ),
-                            }))
-                          }
-                          disabled={
-                            (hintCount[selected] || 0) >= problem.hints.length
-                          }
+                      {activeFile && (
+                        <section
+                          className="problem-datasets"
+                          aria-label={`${activeFile.name} 데이터셋 미리보기`}
                         >
-                          <Lightbulb size={15} />
-                          <span>막혔다면 힌트 보기</span>
-                          <small>
-                            {hintCount[selected] || 0}/{problem.hints.length}
-                          </small>
-                          <ChevronDown size={14} />
-                        </button>
-                        {problem.hints
-                          .slice(0, hintCount[selected] || 0)
-                          .map((hint, i) => (
-                            <p key={i}>
-                              <strong>힌트 {i + 1}</strong>
-                              {hint}
-                            </p>
-                          ))}
-                      </div>
-                    </>
-                  )}
-                  {leftTab === "data" && (
-                    <>
-                      <div className="section-label">
-                        제공 데이터셋{" "}
-                        <span className="muted-text">처음 8행 미리보기</span>
-                      </div>
-                      <div className="file-switcher">
-                        {problem.files.map((f, i) => (
-                          <button
-                            key={f.name}
-                            className={fileIndex === i ? "active" : ""}
-                            onClick={() => setFileIndex(i)}
-                          >
-                            <FileSpreadsheet size={14} />
-                            {f.name}
-                          </button>
-                        ))}
-                      </div>
-                      {(() => {
-                        const f = problem.files[fileIndex] || problem.files[0];
-                        return (
-                          <>
-                            <div className="dataset-info">
-                              <strong>{f.description}</strong>
-                              <div>
-                                <Badge>{f.rows.toLocaleString()}행</Badge>
-                                <Badge>{f.columns.length}열</Badge>
-                                <Badge tone={f.missing ? "amber" : ""}>
-                                  결측 {f.missing}개
-                                </Badge>
-                                <a
-                                  className="download-link"
-                                  href={`${BASE}content/data/${selected}/${f.name}`}
-                                  download={f.name}
+                          {problem.files.length > 1 && (
+                            <div
+                              className="file-switcher"
+                              role="group"
+                              aria-label="데이터셋 선택"
+                            >
+                              {problem.files.map((file, i) => (
+                                <button
+                                  key={file.name}
+                                  className={fileIndex === i ? "active" : ""}
+                                  aria-pressed={fileIndex === i}
+                                  onClick={() => setFileIndex(i)}
                                 >
-                                  <ArrowDownToLine size={14} />
-                                  CSV 다운로드
-                                </a>
-                              </div>
-                            </div>
-                            <DataTable
-                              columns={f.columns.map((c) => c.name)}
-                              rows={f.preview}
-                            />
-                            <div className="section-label column-title">
-                              변수 설명
-                            </div>
-                            <div className="column-definitions">
-                              {f.columns.map((c) => (
-                                <div key={c.name}>
-                                  <code>{c.name}</code>
-                                  <Badge>{c.type}</Badge>
-                                  <p>{c.description}</p>
-                                </div>
+                                  <FileSpreadsheet size={14} />
+                                  {file.name}
+                                </button>
                               ))}
                             </div>
-                            <div className="read-example">
-                              <span>불러오기</span>
-                              <code>pd.read_csv("data/{f.name}")</code>
-                            </div>
-                          </>
-                        );
-                      })()}
+                          )}
+                          <DataTable
+                            columns={activeFile.columns.map(
+                              (column) => column.name,
+                            )}
+                            rows={activeFile.preview}
+                          />
+                        </section>
+                      )}
                     </>
                   )}
                   {leftTab === "note" && (
