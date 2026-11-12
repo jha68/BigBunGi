@@ -479,6 +479,14 @@ function App({ initialState = initial, onStateChange, syncControls }) {
     setSelected(id);
     history.replaceState(null, "", "#" + id);
   }
+  function selectType(type) {
+    const problems = catalog
+      .filter((problem) => problem.type === type)
+      .sort((a, b) => a.number - b.number);
+    const next =
+      problems.find((problem) => !progress[problem.id]?.passed) || problems[0];
+    if (next) select(next.id);
+  }
   async function runCode() {
     const p = problemRef.current;
     if (!p || runMeta.current) return;
@@ -687,11 +695,7 @@ function App({ initialState = initial, onStateChange, syncControls }) {
               <button
                 key={type}
                 className={`type-button ${selected !== "home" && kind === type ? "active" : ""}`}
-                onClick={() =>
-                  select(
-                    catalog.find((p) => p.type === type)?.id || `t${type}-01`,
-                  )
-                }
+                onClick={() => selectType(type)}
               >
                 <Icon size={18} />
                 <span>
@@ -846,6 +850,7 @@ function App({ initialState = initial, onStateChange, syncControls }) {
             progress={progress}
             mode={homeMode}
             onModeChange={setHomeMode}
+            onSelectType={selectType}
             onSelect={(id) => {
               if (catalog.some((entry) => entry.id === id)) select(id);
               else notify("문제 목록에서 찾을 수 없는 문제입니다.");

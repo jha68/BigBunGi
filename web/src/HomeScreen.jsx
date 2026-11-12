@@ -41,6 +41,7 @@ export default function HomeScreen({
   mode,
   onModeChange,
   onSelect,
+  onSelectType,
   syncStatus,
 }) {
   const studyData = { catalog, notes, highlights, progress, syncStatus };
@@ -108,7 +109,7 @@ export default function HomeScreen({
               return (
                 <button
                   key={type}
-                  onClick={() => problems[0] && onSelect(problems[0].id)}
+                  onClick={() => onSelectType(type)}
                   disabled={!problems.length}
                 >
                   <Icon size={25} />
