@@ -25,7 +25,7 @@ test("deployment cannot create resources without explicit Free-plan verification
 });
 
 test("invalid password length identifies only SYNC_PASSWORD without exposing credentials or contacting Cloudflare", () => {
-  for (const password of ["short-only", "x".repeat(129)]) {
+  for (const password of ["short-key", "x".repeat(129)]) {
     const run = spawnSync(
       process.execPath,
       [new URL("../deploy.mjs", import.meta.url).pathname],
@@ -44,7 +44,7 @@ test("invalid password length identifies only SYNC_PASSWORD without exposing cre
     assert.equal(run.status, 1);
     assert.match(
       run.stderr,
-      /::error title=Sync configuration::SYNC_PASSWORD must contain 12-128 characters/,
+      /::error title=Sync configuration::SYNC_PASSWORD must contain 10-128 characters/,
     );
     assert.match(run.stderr, /Cloudflare has not been contacted/);
     for (const value of [
@@ -55,6 +55,31 @@ test("invalid password length identifies only SYNC_PASSWORD without exposing cre
       assert.ok(!run.stderr.includes(value));
     assert.equal(run.stdout, "");
   }
+});
+
+test("a 10-character password passes deployment configuration validation", () => {
+  const fetchStub = `globalThis.fetch = () => { throw new Error("Cloudflare request intercepted"); };`;
+  const run = spawnSync(
+    process.execPath,
+    [
+      "--import",
+      `data:text/javascript,${encodeURIComponent(fetchStub)}`,
+      new URL("../deploy.mjs", import.meta.url).pathname,
+    ],
+    {
+      env: {
+        ...process.env,
+        SYNC_FREE_PLAN_CONFIRMED: "true",
+        CLOUDFLARE_API_TOKEN: "test-only-not-a-token",
+        CLOUDFLARE_ACCOUNT_ID: "test-only-not-an-account",
+        SYNC_PASSWORD: "test-key10",
+      },
+      encoding: "utf8",
+      timeout: 5000,
+    },
+  );
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /Cloudflare request intercepted/);
 });
 
 test("missing secret errors name the missing field without exposing supplied secrets", () => {

@@ -41,9 +41,9 @@ if (missing.length)
   configurationError(
     `Missing repository Actions secret: ${missing.join(", ")}. Add each secret separately using its exact name.`,
   );
-if (password.length < 12 || password.length > 128)
+if (password.length < 10 || password.length > 128)
   configurationError(
-    "SYNC_PASSWORD must contain 12-128 characters. Update only the SYNC_PASSWORD repository Actions secret, then rerun this workflow. Cloudflare has not been contacted.",
+    "SYNC_PASSWORD must contain 10-128 characters. Update only the SYNC_PASSWORD repository Actions secret, then rerun this workflow. Cloudflare has not been contacted.",
   );
 const api = async (path, data, allowMissing = false) => {
   const response = await fetch(

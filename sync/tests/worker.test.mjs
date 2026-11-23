@@ -5,7 +5,7 @@ import { pbkdf2Sync } from "node:crypto";
 import { Miniflare } from "miniflare";
 
 const origin = "https://bigbungi.junununseo.com";
-const password = "test-only-password-never-used-in-production";
+const password = "test-key10";
 const salt = "abcdef1234567890abcdef1234567890";
 const hash = `pbkdf2-100000:${salt}:${pbkdf2Sync(password, Buffer.from(salt, "hex"), 100000, 32, "sha256").toString("hex")}`;
 const state = {

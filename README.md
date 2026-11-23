@@ -27,7 +27,7 @@
 | --- | --- |
 | `CLOUDFLARE_ACCOUNT_ID` | `junununseo.com`을 관리하는 Cloudflare 계정의 Account ID |
 | `CLOUDFLARE_API_TOKEN` | 해당 계정의 Workers Scripts 편집·D1 편집·Account Settings 조회, 해당 도메인의 Zone 조회·Workers Routes 편집·DNS 편집 권한이 있는 토큰 |
-| `SYNC_PASSWORD` | 앱에 로그인할 개인용 비밀번호. 12–128자. |
+| `SYNC_PASSWORD` | 앱에 로그인할 개인용 비밀번호. 10–128자. |
 
 토큰은 [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens)에서 만들고, 리소스는 해당 계정과 `junununseo.com`으로 제한합니다. Account ID는 Cloudflare 도메인 Overview에서 확인합니다. 토큰은 서버와 데이터베이스를 생성하기 위한 관리 권한이며, 웹앱 방문자에게 전달되지 않습니다.
 
