@@ -7,7 +7,7 @@ import asyncio
 import json
 import os
 import urllib.request
-from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
+from playwright.async_api import async_playwright, expect, TimeoutError as PlaywrightTimeoutError
 
 ORIGIN = "https://bigbungi.junununseo.com"
 API = "https://bigbungi-api.junununseo.com"
@@ -84,7 +84,7 @@ async def main():
             await page.get_by_label("Gemini에게 질문", exact=True).fill(question)
             await page.get_by_label("Gemini에게 질문", exact=True).press("Enter")
             await page.wait_for_function("!document.querySelector('.gemini-stop') && document.querySelector('.gemini-input-wrap textarea').value === ''")
-        seed = {"drafts": {"t1-01": "print('import me')"}, "notes": {"t1-01": SAVED_NOTE}, "answers": {"t1-01": {"result": "42"}}, "progress": {"t1-01": {"passed": True}}, "selected": "t1-01"}
+        seed = {"drafts": {"t1-01": "print('import me')"}, "notes": {"t1-01": SAVED_NOTE}, "answers": {"t1-01": {"result": "42"}}, "progress": {"t1-01": {"passed": True}, "t2-01": {"passed": True}}, "selected": "t1-01"}
         a = await context(seed); page = await a.new_page(); await page.goto(ORIGIN)
         assert await page.locator(".coding-panel").count() == 0
         await login(page, "wrong")
@@ -93,6 +93,26 @@ async def main():
         await login(page)
         await page.get_by_role("button", name="이 브라우저 기록 가져오기", exact=True).click()
         await saved(page)
+
+        mark = page.get_by_role("button", name="다시 풀기 표시", exact=True)
+        review = page.get_by_role("navigation", name="다시 풀 문제 목록")
+        await expect(mark).to_have_attribute("aria-pressed", "false")
+        await page.locator(".review-filter").click()
+        await expect(review.get_by_text("다시 풀기 표시를 한 문제가 없습니다.")).to_be_visible()
+        await page.locator(".review-filter").click()
+        await mark.click()
+        await expect(mark).to_have_attribute("aria-pressed", "true")
+        await page.get_by_role("button", name="작업형 2유형").click()
+        await expect(page.locator(".problem-kicker .badge")).to_have_text("작업형 2유형")
+        await expect(mark).to_have_count(0)
+        await page.get_by_role("navigation", name="문제 목록", exact=True).get_by_role("button", name="다시 풀기 표시").click()
+        await page.locator(".review-filter").click()
+        await expect(review.locator(".question-number")).to_have_text(["1유형 01", "2유형 01"])
+        await review.locator(".question-link").first.click()
+        await saved(page)
+        await expect(mark).to_have_attribute("aria-pressed", "true")
+        await page.locator(".review-filter").click()
+
         await edit(page, 'print("DEVICE_ONE")'); await saved(page)
 
         await page.get_by_role("tab", name="AI 질문", exact=True).click()
@@ -116,6 +136,7 @@ async def main():
         await page.locator(".question-link").first.click()
         await page.get_by_role("button", name="코드만 초기화", exact=True).click()
         await saved(page)
+        await expect(mark).to_have_attribute("aria-pressed", "true")
         assert "결측값은 어떻게 처리해?" in await page.locator(".gemini-messages").inner_text()
         await edit(page, 'print("DEVICE_ONE")'); await saved(page)
         await page.get_by_role("tab", name="노트", exact=True).click()
@@ -127,6 +148,15 @@ async def main():
 
         b = await context(); other = await b.new_page(); await other.goto(ORIGIN); await login(other)
         await saved(other)
+        await expect(other.get_by_role("button", name="다시 풀기 표시", exact=True)).to_have_attribute("aria-pressed", "true")
+        await other.locator(".review-filter").click()
+        restored_review = other.get_by_role("navigation", name="다시 풀 문제 목록")
+        await expect(restored_review.locator(".question-number")).to_have_text(["1유형 01", "2유형 01"])
+        await restored_review.get_by_role("button", name="다시 풀기 표시").last.click()
+        await expect(restored_review.locator(".question-number")).to_have_text(["1유형 01"])
+        await saved(other)
+        await other.locator(".review-filter").click()
+        print("PASS: completed problems can be marked, reviewed across types, restored on another device, and unmarked.", flush=True)
         await other.get_by_role("tab", name="AI 질문", exact=True).click()
         await other.wait_for_selector(".gemini-status.ready")
         assert "Gemini 2.5 Flash" in await other.locator(".gemini-selected-model").inner_text()
@@ -186,7 +216,12 @@ async def main():
         print("PASS: network errors and expired sessions preserve edits, retry and re-login restore synchronization.", flush=True)
 
         await page.set_viewport_size({"width": 390, "height": 844})
+        await page.wait_for_function("getComputedStyle(document.querySelector('.main-shell')).marginLeft === '0px'")
         assert await page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+        await page.get_by_role("button", name="문제 목록 열기", exact=True).click()
+        await page.locator(".review-filter").click()
+        await expect(review.locator(".question-number")).to_have_text(["1유형 01"])
+        await page.get_by_role("button", name="문제 목록 닫기", exact=True).click()
         await page.get_by_role("button", name="로그아웃", exact=True).click()
         await page.get_by_role("button", name="로그인", exact=True).wait_for()
         assert await page.locator(".coding-panel").count() == 0

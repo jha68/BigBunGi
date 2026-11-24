@@ -4,6 +4,7 @@ import {
   ArrowDownToLine,
   ArrowLeft,
   ArrowRight,
+  Bookmark,
   BookOpen,
   Check,
   CheckCheck,
@@ -156,6 +157,22 @@ function RetryProblemDialog({ problem, onContinue, onReset }) {
   );
 }
 
+function RetryMark({ marked, onToggle, problemTitle }) {
+  const label = "다시 풀기 표시";
+  return (
+    <button
+      className={`retry-mark ${problemTitle ? "retry-mark-compact" : ""}`}
+      aria-label={problemTitle ? `${problemTitle} ${label}` : label}
+      aria-pressed={marked}
+      title={marked ? "다시 풀기 표시 해제" : label}
+      onClick={onToggle}
+    >
+      <Bookmark size={15} aria-hidden="true" />
+      {!problemTitle && label}
+    </button>
+  );
+}
+
 function App({ initialState = initial, onStateChange, syncControls }) {
   const [catalog, setCatalog] = useState([]),
     [selected, setSelected] = useState(
@@ -185,6 +202,7 @@ function App({ initialState = initial, onStateChange, syncControls }) {
     [grading, setGrading] = useState(false),
     [fontSize, setFontSize] = useState(13);
   const [search, setSearch] = useState(""),
+    [reviewOnly, setReviewOnly] = useState(false),
     [navOpen, setNavOpen] = useState(false),
     [navCollapsed, setNavCollapsed] = useState(false),
     [smallScreen, setSmallScreen] = useState(
@@ -199,6 +217,7 @@ function App({ initialState = initial, onStateChange, syncControls }) {
     gradingCache = useRef(null),
     toastTimer = useRef(null);
   const navToggle = useRef(null);
+  const reviewFilter = useRef(null);
   const navVisible = smallScreen ? navOpen : !navCollapsed;
   useEffect(() => {
     const query = matchMedia("(max-width: 720px)");
@@ -477,13 +496,34 @@ function App({ initialState = initial, onStateChange, syncControls }) {
     setSelected(id);
     history.replaceState(null, "", "#" + id);
   }
+  function changeReviewFilter(active) {
+    if (active === reviewOnly) return;
+    setReviewOnly(active);
+    setSearch("");
+  }
+  function selectHome() {
+    changeReviewFilter(false);
+    setHomeMode("overview");
+    select("home");
+  }
   function selectType(type) {
     const problems = catalog
       .filter((problem) => problem.type === type)
       .sort((a, b) => a.number - b.number);
     const next =
       problems.find((problem) => !progress[problem.id]?.passed) || problems[0];
+    changeReviewFilter(false);
     if (next) select(next.id);
+  }
+  function toggleRetryMark(id) {
+    setProgress((previous) => {
+      const record = previous[id];
+      if (!record?.passed) return previous;
+      return {
+        ...previous,
+        [id]: { ...record, retryMarked: record.retryMarked !== true },
+      };
+    });
   }
   async function runCode() {
     const p = problemRef.current;
@@ -617,7 +657,11 @@ function App({ initialState = initial, onStateChange, syncControls }) {
   }
   const result = results[selected],
     gradeResult = grades[selected];
-  const solved = catalog.filter((p) => progress[p.id]?.passed).length;
+  const solvedProblems = catalog.filter((p) => progress[p.id]?.passed);
+  const solved = solvedProblems.length;
+  const reviewProblems = solvedProblems.filter(
+    (p) => progress[p.id].retryMarked === true,
+  );
   const totalProblems = catalog.length;
   const typeCounts = Object.fromEntries(
     [1, 2, 3].map((type) => [
@@ -626,14 +670,16 @@ function App({ initialState = initial, onStateChange, syncControls }) {
     ]),
   );
   const kind = problem?.type || Number(selected[1]) || 1;
-  const visible = catalog.filter(
-    (p) =>
-      p.type === kind &&
-      (!search || `${p.title} ${p.tags.join(" ")}`.includes(search)),
+  const listedProblems = reviewOnly
+    ? reviewProblems
+    : catalog.filter((p) => p.type === kind);
+  const visible = listedProblems.filter(
+    (p) => !search || `${p.title} ${p.tags.join(" ")}`.includes(search),
   );
   const index = catalog.findIndex((p) => p.id === selected);
   const currentAnswers = answers[selected] || {};
   const activeFile = problem?.files[fileIndex] || problem?.files[0];
+  const currentProgress = progress[problem?.id];
 
   return (
     <div className={`app-shell ${navCollapsed ? "sidebar-collapsed" : ""}`}>
@@ -656,8 +702,7 @@ function App({ initialState = initial, onStateChange, syncControls }) {
           href="#home"
           onClick={(e) => {
             e.preventDefault();
-            select("home");
-            setHomeMode("overview");
+            selectHome();
           }}
           aria-label="빅분기 홈"
         >
@@ -677,23 +722,18 @@ function App({ initialState = initial, onStateChange, syncControls }) {
         </div>
         <div className="type-nav">
           <button
-            className={`sidebar-home ${selected === "home" ? "active" : ""}`}
-            onClick={() => {
-              select("home");
-              setHomeMode("overview");
-            }}
+            className={`sidebar-home ${selected === "home" && !reviewOnly ? "active" : ""}`}
+            onClick={selectHome}
           >
             <Home size={17} /> 학습 홈
           </button>
           {[1, 2, 3].map((type) => {
             const Icon = TYPE_INFO[type].icon;
-            const passed = catalog.filter(
-              (p) => p.type === type && progress[p.id]?.passed,
-            ).length;
+            const passed = solvedProblems.filter((p) => p.type === type).length;
             return (
               <button
                 key={type}
-                className={`type-button ${selected !== "home" && kind === type ? "active" : ""}`}
+                className={`type-button ${!reviewOnly && selected !== "home" && kind === type ? "active" : ""}`}
                 onClick={() => selectType(type)}
               >
                 <Icon size={18} />
@@ -708,12 +748,22 @@ function App({ initialState = initial, onStateChange, syncControls }) {
               </button>
             );
           })}
+          <button
+            ref={reviewFilter}
+            className="review-filter"
+            aria-pressed={reviewOnly}
+            onClick={() => changeReviewFilter(!reviewOnly)}
+          >
+            <Bookmark size={16} aria-hidden="true" />
+            다시 풀 문제
+            <span className="review-count">{reviewProblems.length}</span>
+          </button>
         </div>
-        {selected !== "home" && (
+        {(selected !== "home" || reviewOnly) && (
           <>
             <div className="question-list-heading">
-              <span>문제 목록</span>
-              <span>{typeCounts[kind]}문제</span>
+              <span>{reviewOnly ? "다시 풀 문제 목록" : "문제 목록"}</span>
+              <span>{listedProblems.length}문제</span>
             </div>
             <div className="search-field">
               <Search size={14} />
@@ -729,29 +779,48 @@ function App({ initialState = initial, onStateChange, syncControls }) {
                 </button>
               )}
             </div>
-            <nav className="question-list" aria-label="문제 목록">
+            <nav
+              className="question-list"
+              aria-label={reviewOnly ? "다시 풀 문제 목록" : "문제 목록"}
+            >
               {visible.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => select(p.id)}
-                  className={`question-link ${selected === p.id ? "selected" : ""}`}
-                  aria-current={selected === p.id ? "page" : undefined}
-                >
-                  <span className="question-number">
-                    {String(p.number).padStart(2, "0")}
-                  </span>
-                  <span className="question-name">{p.title}</span>
-                  {progress[p.id]?.passed ? (
-                    <CheckCircle2 size={14} className="solved-icon" />
-                  ) : selected === p.id ? (
-                    <span className="current-dot" />
-                  ) : (
-                    <Circle size={12} className="pending-icon" />
+                <div className="question-row" key={p.id}>
+                  <button
+                    onClick={() => select(p.id)}
+                    className={`question-link ${selected === p.id ? "selected" : ""}`}
+                    aria-current={selected === p.id ? "page" : undefined}
+                  >
+                    <span className="question-number">
+                      {reviewOnly && `${p.type}유형 `}
+                      {String(p.number).padStart(2, "0")}
+                    </span>
+                    <span className="question-name">{p.title}</span>
+                    {progress[p.id]?.passed ? (
+                      <CheckCircle2 size={14} className="solved-icon" />
+                    ) : selected === p.id ? (
+                      <span className="current-dot" />
+                    ) : (
+                      <Circle size={12} className="pending-icon" />
+                    )}
+                  </button>
+                  {progress[p.id]?.passed && (
+                    <RetryMark
+                      problemTitle={p.title}
+                      marked={progress[p.id].retryMarked === true}
+                      onToggle={() => {
+                        if (reviewOnly) reviewFilter.current?.focus();
+                        toggleRetryMark(p.id);
+                      }}
+                    />
                   )}
-                </button>
+                </div>
               ))}
               {!visible.length && (
-                <p className="no-search">검색 결과가 없습니다.</p>
+                <p className="no-search">
+                  {reviewOnly && !reviewProblems.length
+                    ? "다시 풀기 표시를 한 문제가 없습니다."
+                    : "검색 결과가 없습니다."}
+                </p>
               )}
             </nav>
           </>
@@ -869,11 +938,17 @@ function App({ initialState = initial, onStateChange, syncControls }) {
                   <div className="problem-kicker">
                     <Badge tone={`type${kind}`}>작업형 {kind}유형</Badge>
                     <span>문제 {String(problem.number).padStart(2, "0")}</span>
-                    {progress[selected]?.passed && (
-                      <span className="solved-label">
-                        <CheckCheck size={14} />
-                        해결 완료
-                      </span>
+                    {currentProgress?.passed && (
+                      <>
+                        <span className="solved-label">
+                          <CheckCheck size={14} />
+                          해결 완료
+                        </span>
+                        <RetryMark
+                          marked={currentProgress.retryMarked === true}
+                          onToggle={() => toggleRetryMark(problem.id)}
+                        />
+                      </>
                     )}
                   </div>
                   <h2>{problem.title}</h2>
