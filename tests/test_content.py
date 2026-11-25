@@ -60,6 +60,30 @@ class ContentTests(unittest.TestCase):
                     for directory in (DATA, PUBLIC / 'data'):
                         self.assertEqual(hashlib.sha256((directory / p['id'] / filename).read_bytes()).hexdigest(), digest)
 
+    def test_mock_exam_catalog_and_assets_are_separate(self):
+        mock = PUBLIC / "mock-exams"
+        index = json.loads((mock / "index.json").read_text())
+        self.assertEqual([entry["round"] for entry in index], list(range(12, 1, -1)))
+        for entry in index:
+            number = entry["round"]
+            with self.subTest(round=number):
+                exam = json.loads((mock / "rounds" / f"{number}.json").read_text())
+                questions = exam["questions"]
+                self.assertEqual(exam["date"], entry["date"])
+                self.assertEqual(entry["minutes"], 180)
+                self.assertTrue(entry["sources"])
+                expected_types = [0] * 10 + [1, 1, 1, 2] if number < 6 else [1, 1, 1, 2, 3, 3]
+                self.assertEqual([item["type"] for item in questions], expected_types)
+                self.assertEqual(sum(item["points"] for item in questions), 100)
+                keys = json.loads((mock / "keys" / f"{number}.json").read_text())
+                for question in questions:
+                    question_id = question["id"]
+                    self.assertNotIn(question_id, self.keys)
+                    self.assertNotIn("expected", question)
+                    self.assertIn(question_id, keys)
+                    for file in question["files"]:
+                        self.assertTrue((mock / "data" / question_id / file["name"]).is_file())
+
     def test_revised_answer_contracts_and_prediction_requirements(self):
         for p in PROBLEMS:
             with self.subTest(problem=p['id']):

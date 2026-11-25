@@ -26,7 +26,7 @@ def _clean(value):
         return _clean(value.item())
     return str(value)
 
-def _run_source(source):
+def _run_source(source, submission_name):
     output, errors = _BoundedOutput(), _BoundedOutput()
     scope = {'__name__': '__main__'}
     result = {'stdout': '', 'stderr': '', 'error': None, 'answers': {}, 'submission': None, 'display': None, 'plots': []}
@@ -45,14 +45,15 @@ def _run_source(source):
                         result['display'] = {'kind': 'text', 'text': repr(value)[:12000]}
             if isinstance(scope.get('answers'), dict):
                 result['answers'] = _clean(scope['answers'])
-            if os.path.isfile('submission.csv'):
-                if os.path.getsize('submission.csv') > 1048576:
-                    raise ValueError('submission.csv는 1MB 이하여야 합니다.')
-                with open('submission.csv', encoding='utf-8-sig', newline='') as handle:
+            if os.path.isfile(submission_name):
+                if os.path.getsize(submission_name) > 1048576:
+                    raise ValueError(f'{submission_name} 파일은 1MB 이하여야 합니다.')
+                with open(submission_name, encoding='utf-8-sig', newline='') as handle:
                     reader = csv.DictReader(handle)
                     rows = list(reader)
                     result['submission'] = {'columns': reader.fieldnames or [], 'rows': rows}
-                result['submissionText'] = open('submission.csv', encoding='utf-8-sig').read()
+                with open(submission_name, encoding='utf-8-sig') as handle:
+                    result['submissionText'] = handle.read()
             if 'matplotlib.pyplot' in sys.modules:
                 plt = sys.modules['matplotlib.pyplot']
                 for number in plt.get_fignums()[:4]:
@@ -100,7 +101,7 @@ self.onmessage = async ({ data }) => {
     return;
   }
   if (data.type !== "run" || !runtime) return;
-  const { id, code, files } = data;
+  const { id, code, files, submissionName = "submission.csv" } = data;
   try {
     postMessage({
       type: "packages",
@@ -116,8 +117,10 @@ self.onmessage = async ({ data }) => {
     postMessage({ type: "executing", id });
     const start = performance.now();
     runtime.globals.set("_source_text", code);
-    const raw = await runtime.runPythonAsync("_run_source(_source_text)");
+    runtime.globals.set("_submission_name", submissionName);
+    const raw = await runtime.runPythonAsync("_run_source(_source_text, _submission_name)");
     runtime.globals.delete("_source_text");
+    runtime.globals.delete("_submission_name");
     postMessage({
       type: "result",
       id,

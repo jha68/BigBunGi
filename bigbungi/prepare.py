@@ -12,6 +12,7 @@ import pandas as pd
 
 from .content import PROBLEMS
 from .datasets import generate, VERSION
+from .mock_exams import prepare_mock_exams
 
 ROOT=Path(__file__).resolve().parent.parent
 DATA=ROOT/".runtime"/"datasets"
@@ -31,6 +32,11 @@ def reference_result(problem, directory):
 
 
 def prepare(force=False):
+    prepare_practice(force)
+    prepare_mock_exams(PUBLIC / "mock-exams", reference_result, force)
+
+
+def prepare_practice(force=False):
     sources=["content.py","datasets.py","extra_content.py","extra_datasets.py"]
     fingerprint=hashlib.sha256(b"".join((ROOT/"bigbungi"/name).read_bytes() for name in sources)).hexdigest()
     marker=PUBLIC/"build.json"

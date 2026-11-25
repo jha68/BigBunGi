@@ -77,7 +77,8 @@
   color: #349b8e;
   margin-top: 25px;
 }
-.home-ai-card {
+.home-ai-card,
+.home-mock-card {
   width: 100%;
   display: flex;
   align-items: center;
@@ -90,14 +91,17 @@
   padding: 26px;
   text-align: left;
 }
-.home-ai-card div {
+.home-ai-card div,
+.home-mock-card div {
   flex: 1;
 }
-.home-ai-card h2 {
+.home-ai-card h2,
+.home-mock-card h2 {
   margin: 0 0 8px;
   font-size: 19px;
 }
-.home-ai-card p {
+.home-ai-card p,
+.home-mock-card p {
   margin: 0 0 9px;
   font-size: 12px;
   line-height: 1.8;
@@ -105,6 +109,17 @@
 .home-ai-card small {
   color: #7895a9;
   font-size: 10px;
+}
+.home-mock-card {
+  color: #225b59;
+  background: #e9f7f4;
+  border-color: #bbded6;
+}
+.home-mock-card:hover {
+  border-color: #55b8a8;
+}
+.home-mock-card p {
+  margin-bottom: 0;
 }
 .home-chat-heading {
   display: flex;
@@ -243,7 +258,8 @@
   .home-intro h1 {
     font-size: 24px;
   }
-  .home-ai-card {
+  .home-ai-card,
+  .home-mock-card {
     padding: 20px 16px;
     gap: 13px;
   }

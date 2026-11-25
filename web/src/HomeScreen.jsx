@@ -3,6 +3,7 @@ import {
   ArrowRight,
   Database,
   FlaskConical,
+  ClipboardList,
   BookOpen,
   Sparkles,
   Highlighter,
@@ -42,6 +43,7 @@ export default function HomeScreen({
   onModeChange,
   onSelect,
   onSelectType,
+  onMockExam,
   syncStatus,
 }) {
   const studyData = { catalog, notes, highlights, progress, syncStatus };
@@ -125,6 +127,14 @@ export default function HomeScreen({
               );
             })}
           </div>
+          <button className="home-mock-card" onClick={onMockExam}>
+            <ClipboardList size={29} />
+            <div>
+              <h2>모의시험 연습하기</h2>
+              <p>회차별 기출 복원 문제를 180분 동안 풀고 한꺼번에 제출하세요.</p>
+            </div>
+            <ArrowRight size={21} />
+          </button>
           <button className="home-ai-card" onClick={() => onModeChange("ai")}>
             <Sparkles size={29} />
             <div>

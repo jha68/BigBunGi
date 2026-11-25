@@ -58,9 +58,9 @@ export function rocAuc(truth, predictions) {
   return (sum - (positives * (positives + 1)) / 2) / (positives * negatives);
 }
 
-export function macroF1(truth, predictions) {
+export function macroF1(truth, predictions, labels = [0, 1, 2]) {
   return (
-    [0, 1, 2].reduce((total, label) => {
+    labels.reduce((total, label) => {
       let tp = 0,
         fp = 0,
         fn = 0;
@@ -72,16 +72,26 @@ export function macroF1(truth, predictions) {
       });
       const denominator = 2 * tp + fp + fn;
       return total + (denominator ? (2 * tp) / denominator : 0);
-    }, 0) / 3
+    }, 0) / labels.length
   );
 }
 
 export function gradePrediction(spec, submission) {
   if (!submission)
     throw new Error(
-      "submission.csv가 없습니다. 코드를 실행해 파일을 먼저 저장하세요.",
+      `${spec.filename || "submission.csv"}가 없습니다. 코드를 실행해 파일을 먼저 저장하세요.`,
     );
-  const { columns, rows } = submission;
+  let { columns, rows } = submission;
+  if (spec.ordered) {
+    if (!Array.isArray(columns) || columns.length !== 1 || columns[0] !== spec.prediction)
+      throw new Error(`CSV에는 ${spec.prediction} 열만 있어야 합니다. index=False로 저장했는지 확인하세요.`);
+    if (rows.length !== spec.ids.length)
+      throw new Error(`제출 행 수가 다릅니다. 필요: ${spec.ids.length}행, 제출: ${rows.length}행`);
+    if (rows.some((row) => Object.keys(row).length !== 1 || !Object.hasOwn(row, spec.prediction)))
+      throw new Error("CSV 행의 열 수가 헤더와 다릅니다. 구분자와 쉼표를 확인하세요.");
+    columns = ["id", spec.prediction];
+    rows = rows.map((row, i) => ({ ...row, id: spec.ids[i] }));
+  }
   if (
     !Array.isArray(columns) ||
     columns.length !== 2 ||
@@ -97,6 +107,7 @@ export function gradePrediction(spec, submission) {
       `제출 행 수가 다릅니다. 필요: ${spec.ids.length}행, 제출: ${rows.length}행`,
     );
   const byId = new Map();
+  const labels = spec.labels || [0, 1, 2];
   for (const row of rows) {
     if (
       Object.keys(row).length !== 2 ||
@@ -120,8 +131,10 @@ export function gradePrediction(spec, submission) {
       );
     if (spec.metric === "roc_auc" && (value < 0 || value > 1))
       throw new Error("이탈 확률은 0과 1 사이여야 합니다.");
-    if (spec.metric === "macro_f1" && ![0, 1, 2].includes(value))
-      throw new Error("level은 0, 1, 2 중 하나여야 합니다.");
+    if (spec.metric === "macro_f1" && !labels.includes(value))
+      throw new Error(`${spec.prediction}은 ${labels.join(", ")} 중 하나여야 합니다.`);
+    if (spec.metric === "rmsle" && value < 0)
+      throw new Error("RMSLE 평가에는 음수가 아닌 예측값이 필요합니다.");
     byId.set(id, value);
   }
   const predictions = spec.ids.map((id) => {
@@ -129,15 +142,28 @@ export function gradePrediction(spec, submission) {
       throw new Error(`test.csv에 있는 id가 제출 파일에 없습니다: ${id}`);
     return byId.get(id);
   });
-  const metric =
-    spec.metric === "roc_auc"
-      ? rocAuc(spec.y, predictions)
-      : spec.metric === "macro_f1"
-        ? macroF1(spec.y, predictions)
-        : Math.sqrt(
-            spec.y.reduce((s, y, i) => s + (y - predictions[i]) ** 2, 0) /
-              spec.y.length,
-          );
+  let metric;
+  switch (spec.metric) {
+    case "roc_auc":
+      metric = rocAuc(spec.y, predictions);
+      break;
+    case "macro_f1":
+      metric = macroF1(spec.y, predictions, labels);
+      break;
+    case "mae":
+      metric = spec.y.reduce((sum, y, i) => sum + Math.abs(y - predictions[i]), 0) / spec.y.length;
+      break;
+    case "rmsle":
+      metric = Math.sqrt(spec.y.reduce(
+        (sum, y, i) => sum + (Math.log1p(y) - Math.log1p(predictions[i])) ** 2, 0,
+      ) / spec.y.length);
+      break;
+    default:
+      metric = Math.sqrt(
+        spec.y.reduce((s, y, i) => s + (y - predictions[i]) ** 2, 0) /
+          spec.y.length,
+      );
+  }
   const passed = spec.higher
     ? metric >= spec.threshold
     : metric <= spec.threshold;
@@ -148,7 +174,7 @@ export function gradePrediction(spec, submission) {
     passed,
     metric,
     metricName: spec.metric.toUpperCase(),
-    score: Math.round(Math.max(0, Math.min(100, ratio * 70))),
+    score: Math.round(Math.max(0, Math.min(100, ratio * (spec.scale ?? 70)))),
     threshold: spec.threshold,
     higher: spec.higher,
     rows: predictions.length,

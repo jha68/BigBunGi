@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Circle,
   Clock3,
+  ClipboardList,
   Code2,
   Database,
   ExternalLink,
@@ -41,6 +42,7 @@ import CodeEditor from "./CodeEditor.jsx";
 import { GeminiProvider, GeminiTutor } from "./GeminiTutor.jsx";
 import PracticeNotes from "./PracticeNotes.jsx";
 import HomeScreen from "./HomeScreen.jsx";
+import MockExam from "./MockExam.jsx";
 import { gradeNumeric, gradePrediction } from "./grading.js";
 import SyncGate, { SyncStatus } from "./SyncGate.jsx";
 import "./styles.css";
@@ -219,6 +221,9 @@ function App({ initialState = initial, onStateChange, syncControls }) {
   const navToggle = useRef(null);
   const reviewFilter = useRef(null);
   const navVisible = smallScreen ? navOpen : !navCollapsed;
+  const inMockExam = selected === "mock-exam";
+  const practiceSelection = useRef(initialState.selected || "t1-01");
+  if (!inMockExam) practiceSelection.current = selected;
   useEffect(() => {
     const query = matchMedia("(max-width: 720px)");
     const changed = (event) => {
@@ -309,7 +314,7 @@ function App({ initialState = initial, onStateChange, syncControls }) {
     setFileIndex(0);
     setLeftTab("problem");
     setAiExpanded(false);
-    if (selected === "home")
+    if (selected === "home" || selected === "mock-exam")
       return () => {
         live = false;
       };
@@ -334,24 +339,18 @@ function App({ initialState = initial, onStateChange, syncControls }) {
       setRetryProblem(problem);
   }, [problem?.id]);
   useEffect(() => {
+    const snapshot = {
+      drafts, answers, notes, highlights, progress,
+      selected: practiceSelection.current,
+    };
     try {
-      localStorage.setItem(
-        STORAGE,
-        JSON.stringify({
-          drafts,
-          answers,
-          notes,
-          highlights,
-          progress,
-          selected,
-        }),
-      );
+      localStorage.setItem(STORAGE, JSON.stringify(snapshot));
     } catch {
       notify(
         "브라우저 저장 공간이 부족해 자동 저장하지 못했습니다. 코드를 다운로드해 주세요.",
       );
     }
-    onStateChange?.({ drafts, answers, notes, highlights, progress, selected });
+    onStateChange?.(snapshot);
   }, [
     drafts,
     answers,
@@ -392,6 +391,7 @@ function App({ initialState = initial, onStateChange, syncControls }) {
       setRunning(null);
     };
     w.onmessage = ({ data }) => {
+      if (worker.current !== w) return;
       if (data.type === "status") {
         setRuntime({ ready: false, message: data.message });
         return;
@@ -423,8 +423,9 @@ function App({ initialState = initial, onStateChange, syncControls }) {
         return;
       }
       if (data.type === "result") {
-        clearTimeout(timeout.current);
         const meta = runMeta.current;
+        if (meta?.id !== data.id) return;
+        clearTimeout(timeout.current);
         setResults((prev) => ({
           ...prev,
           [data.id]: {
@@ -433,7 +434,7 @@ function App({ initialState = initial, onStateChange, syncControls }) {
             code: meta?.code,
           },
         }));
-        if (!data.result.error && data.result.answers)
+        if (!meta?.submissionName && !data.result.error && data.result.answers)
           setAnswers((prev) => ({
             ...prev,
             [data.id]: {
@@ -506,6 +507,10 @@ function App({ initialState = initial, onStateChange, syncControls }) {
     setHomeMode("overview");
     select("home");
   }
+  function selectMockExam() {
+    changeReviewFilter(false);
+    select("mock-exam");
+  }
   function selectType(type) {
     const problems = catalog
       .filter((problem) => problem.type === type)
@@ -528,6 +533,11 @@ function App({ initialState = initial, onStateChange, syncControls }) {
   async function runCode() {
     const p = problemRef.current;
     if (!p || runMeta.current) return;
+    if (runtime.ready) setBottomTab("output");
+    await runPython({ id: p.id, code: codeRef.current, files: p.files });
+  }
+  async function runPython({ id, code, files, dataId = id, submissionName }) {
+    if (runMeta.current) return;
     if (!runtime.ready) {
       notify(
         runtime.error
@@ -536,10 +546,9 @@ function App({ initialState = initial, onStateChange, syncControls }) {
       );
       return;
     }
-    const source = codeRef.current;
-    runMeta.current = { id: p.id, code: source };
-    setRunning({ id: p.id, stage: "데이터 준비 중…" });
-    setBottomTab("output");
+    const meta = { id, code, submissionName };
+    runMeta.current = meta;
+    setRunning({ id, stage: "데이터 준비 중…" });
     clearTimeout(timeout.current);
     timeout.current = setTimeout(
       () =>
@@ -550,33 +559,36 @@ function App({ initialState = initial, onStateChange, syncControls }) {
     );
     try {
       const pairs = await Promise.all(
-        p.files.map(async (f) => {
-          const key = `${p.id}/${f.name}`;
+        files.map(async (f) => {
+          const key = submissionName
+            ? `content/mock-exams/data/${dataId}/${f.name}`
+            : `content/data/${dataId}/${f.name}`;
           if (!fileCache.current[key]) {
-            const r = await fetch(BASE + "content/data/" + key);
+            const r = await fetch(BASE + key);
             if (!r.ok) throw new Error(`${f.name} 다운로드 실패`);
             fileCache.current[key] = await r.text();
           }
           return [f.name, fileCache.current[key]];
         }),
       );
-      if (runMeta.current?.code !== source || runMeta.current?.id !== p.id)
-        return;
+      if (runMeta.current !== meta) return;
       worker.current.postMessage({
         type: "run",
-        id: p.id,
-        code: source,
+        id,
+        code,
         files: Object.fromEntries(pairs),
+        submissionName,
       });
     } catch (e) {
+      if (runMeta.current !== meta) return;
       clearTimeout(timeout.current);
       runMeta.current = null;
       setRunning(null);
       setResults((prev) => ({
         ...prev,
-        [p.id]: {
+        [id]: {
           error: e.message,
-          code: source,
+          code,
           duration: 0,
           stdout: "",
           stderr: "",
@@ -727,13 +739,20 @@ function App({ initialState = initial, onStateChange, syncControls }) {
           >
             <Home size={17} /> 학습 홈
           </button>
+          <button
+            className={`sidebar-home ${inMockExam ? "active" : ""}`}
+            aria-current={inMockExam ? "page" : undefined}
+            onClick={selectMockExam}
+          >
+            <ClipboardList size={17} /> 모의시험 연습하기
+          </button>
           {[1, 2, 3].map((type) => {
             const Icon = TYPE_INFO[type].icon;
             const passed = solvedProblems.filter((p) => p.type === type).length;
             return (
               <button
                 key={type}
-                className={`type-button ${!reviewOnly && selected !== "home" && kind === type ? "active" : ""}`}
+                className={`type-button ${!reviewOnly && selected !== "home" && !inMockExam && kind === type ? "active" : ""}`}
                 onClick={() => selectType(type)}
               >
                 <Icon size={18} />
@@ -759,7 +778,7 @@ function App({ initialState = initial, onStateChange, syncControls }) {
             <span className="review-count">{reviewProblems.length}</span>
           </button>
         </div>
-        {(selected !== "home" || reviewOnly) && (
+        {((selected !== "home" && !inMockExam) || reviewOnly) && (
           <>
             <div className="question-list-heading">
               <span>{reviewOnly ? "다시 풀 문제 목록" : "문제 목록"}</span>
@@ -877,7 +896,9 @@ function App({ initialState = initial, onStateChange, syncControls }) {
             <span>실기 연습실</span>
             <ChevronRight size={14} />
             <strong>
-              {selected === "home"
+              {inMockExam
+                ? "모의시험"
+                : selected === "home"
                 ? homeMode === "ai"
                   ? "전체 학습 AI"
                   : "학습 홈"
@@ -903,7 +924,24 @@ function App({ initialState = initial, onStateChange, syncControls }) {
             </a>
           </div>
         </header>
-        {fetchError ? (
+        {inMockExam ? (
+          <MockExam
+            load={jsonFile}
+            runtime={runtime}
+            running={running}
+            results={results}
+            onRun={runPython}
+            onStop={() => terminateRun.current()}
+            onRestartRuntime={startWorker}
+            onClearResults={(prefix) =>
+              setResults((previous) =>
+                Object.fromEntries(
+                  Object.entries(previous).filter(([id]) => !id.startsWith(prefix)),
+                ),
+              )
+            }
+          />
+        ) : fetchError ? (
           <div className="fetch-error">
             <XCircle />
             <strong>{fetchError}</strong>
@@ -918,6 +956,7 @@ function App({ initialState = initial, onStateChange, syncControls }) {
             progress={progress}
             mode={homeMode}
             onModeChange={setHomeMode}
+            onMockExam={selectMockExam}
             onSelectType={selectType}
             onSelect={(id) => {
               if (catalog.some((entry) => entry.id === id)) select(id);
