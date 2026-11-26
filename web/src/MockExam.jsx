@@ -410,11 +410,12 @@ function ExamResults({ exam, attempt, load, noteRecords, runner, updateRetry }) 
   );
 }
 
-export default function MockExam({ load, noteRecords, ...runner }) {
+export default function MockExam({ load, noteRecords, view: selectedView, onNavigate: goTo, ...runner }) {
   const [saved, setSaved] = useState(readAttempts);
-  const [view, setView] = useState(() => saved.active
+  const [initialView] = useState(() => saved.active
     ? { mode: "attempt", round: saved.active.round }
     : { mode: "list" });
+  const view = selectedView ?? initialView;
   const [saveError, setSaveError] = useState(false);
   const state = useRef(saved);
   const storageFailed = useRef(false);
@@ -481,10 +482,6 @@ export default function MockExam({ load, noteRecords, ...runner }) {
 
   useExamRuns(runner, saved.active && runPrefix(saved.active));
 
-  const goTo = (mode, roundNumber) => {
-    setView({ mode, round: roundNumber });
-    window.scrollTo({ top: 0 });
-  };
   const start = (exam) => {
     const startedAt = Date.now();
     const attempt = {

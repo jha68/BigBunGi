@@ -191,6 +191,7 @@ function App({ initialState = initial, onStateChange, syncControls }) {
     [bottomTab, setBottomTab] = useState("output");
   const [aiExpanded, setAiExpanded] = useState(false);
   const [homeMode, setHomeMode] = useState("overview");
+  const [mockExamView, setMockExamView] = useState(null);
   const [retryProblem, setRetryProblem] = useState(null);
   const [solutions, setSolutions] = useState({}),
     [fileIndex, setFileIndex] = useState(0);
@@ -507,8 +508,13 @@ function App({ initialState = initial, onStateChange, syncControls }) {
     setHomeMode("overview");
     select("home");
   }
-  function selectMockExam() {
+  function navigateMockExam(mode, round) {
+    setMockExamView(mode ? { mode, round } : null);
+    window.scrollTo({ top: 0 });
+  }
+  function selectMockExam(mode) {
     changeReviewFilter(false);
+    navigateMockExam(mode);
     select("mock-exam");
   }
   function selectType(type) {
@@ -758,7 +764,7 @@ function App({ initialState = initial, onStateChange, syncControls }) {
           <button
             className={`sidebar-home ${inMockExam ? "active" : ""}`}
             aria-current={inMockExam ? "page" : undefined}
-            onClick={selectMockExam}
+            onClick={() => selectMockExam("list")}
           >
             <ClipboardList size={17} /> 모의시험 연습하기
           </button>
@@ -944,6 +950,8 @@ function App({ initialState = initial, onStateChange, syncControls }) {
           <MockExam
             load={jsonFile}
             noteRecords={noteRecords}
+            view={mockExamView}
+            onNavigate={navigateMockExam}
             runtime={runtime}
             running={running}
             results={results}
@@ -973,7 +981,7 @@ function App({ initialState = initial, onStateChange, syncControls }) {
             progress={progress}
             mode={homeMode}
             onModeChange={setHomeMode}
-            onMockExam={selectMockExam}
+            onMockExam={() => selectMockExam()}
             onSelectType={selectType}
             onSelect={(id) => {
               if (catalog.some((entry) => entry.id === id)) select(id);
