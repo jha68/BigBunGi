@@ -1,5 +1,10 @@
 import { useEffect, useRef } from "react";
 import { EditorView, basicSetup } from "codemirror";
+import {
+  indentWithTab,
+  temporarilySetTabFocusMode,
+} from "@codemirror/commands";
+import { indentUnit } from "@codemirror/language";
 import { EditorState, Prec } from "@codemirror/state";
 import { keymap } from "@codemirror/view";
 import { python } from "@codemirror/lang-python";
@@ -32,6 +37,15 @@ export default function CodeEditor({
         ...(readOnly
           ? []
           : [
+              indentUnit.of("    "),
+              keymap.of([indentWithTab]),
+              EditorView.domEventObservers({
+                keydown(event, editor) {
+                  // Escape can also clear a selection or dismiss completion.
+                  if (event.key === "Escape" && !event.isComposing)
+                    temporarilySetTabFocusMode(editor);
+                },
+              }),
               Prec.highest(
                 keymap.of(
                   ["Mod-Enter", "Ctrl-Enter"].map((key) => ({
@@ -102,7 +116,12 @@ export default function CodeEditor({
           "aria-label":
             label || (readOnly ? "Python 기준 풀이" : "Python 코드 편집기"),
           "aria-readonly": String(readOnly),
-          ...(readOnly ? { tabindex: "0" } : {}),
+          ...(readOnly
+            ? { tabindex: "0" }
+            : {
+                "aria-description":
+                  "Tab으로 들여쓰고 Shift+Tab으로 들여쓰기를 줄입니다. 편집기 밖으로 이동하려면 Esc를 누른 뒤 Tab을 누르세요.",
+              }),
           spellcheck: "false",
         }),
         EditorView.updateListener.of((update) => {

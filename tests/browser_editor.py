@@ -51,6 +51,30 @@ async def main():
                 arg=source,
             )
 
+        async def check_indentation(page):
+            source = 'if True:\nprint("first")\nprint("second")\nprint("outside")'
+            editor = await replace_code(page, source)
+            await editor.press("Control+End")
+            await editor.press("Tab")
+            await expect_code(page, source.replace('print("outside")', '    print("outside")'))
+            await editor.press("Shift+Tab")
+            await expect_code(page, source)
+
+            await editor.press("Control+Home")
+            await editor.press("ArrowDown")
+            await editor.press("Shift+ArrowDown")
+            await editor.press("Shift+ArrowDown")
+            await editor.press("Tab")
+            await expect_code(page, 'if True:\n    print("first")\n    print("second")\nprint("outside")')
+            await editor.press("Shift+Tab")
+            await expect_code(page, source)
+
+            await editor.press("Escape")
+            await page.keyboard.press("Tab")
+            assert not await editor.evaluate("e => e === document.activeElement")
+            await expect_code(page, source)
+            print("PASS: Tab and Shift+Tab change indentation by four spaces on the current or selected lines; Esc then Tab moves focus out.", flush=True)
+
         async def check_brackets(page):
             for opening, closing in [("(", ")"), ("[", "]"), ("{", "}"), ("'", "'"), ('"', '"')]:
                 for stale_composition in [False, True]:
@@ -152,6 +176,7 @@ async def main():
             assert await page.get_by_test_id("python-error").count() == 0
 
         context, page = await open_page("Win32")
+        await check_indentation(page)
         await check_brackets(page)
         await check_composed_answers(page)
         editor = await replace_code(page, 'print("WINDOWS_CTRL_ENTER_OK")\n')
