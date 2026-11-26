@@ -6,6 +6,7 @@ import {
   normalizeState,
   hasRecords,
 } from "../src/sync.js";
+import { mergeMockRecords } from "../src/mock-records.js";
 
 test("sync sends credentials as cookies, keeps passwords out of URLs and exposes conflicts", async () => {
   let captured;
@@ -58,4 +59,24 @@ test("record comparison tolerates ordering but preserves cleared code, notes and
     "progress",
     "selected",
   ]);
+});
+
+test("exam migration preserves rounds, newer submissions and removed bookmarks", () => {
+  const remote = {
+    completed: { 11: { id: "remote", startedAt: 1, submittedAt: 4 } },
+    retryMarks: { 11: [] }, retryMarkTimes: { 11: 8 },
+  };
+  const local = {
+    completed: {
+      11: { id: "replaced", startedAt: 2, submittedAt: 3, updatedAt: 5 },
+      12: { id: "legacy", startedAt: 1, submittedAt: 6 },
+    },
+    retryMarks: { 11: ["r11-01"], 12: ["r12-01"] },
+  };
+  const merged = mergeMockRecords(remote, local);
+  assert.deepEqual(merged.completed, { ...remote.completed, 12: local.completed[12] });
+  assert.deepEqual(merged.retryMarks, { 11: [], 12: ["r12-01"] });
+  assert.deepEqual(normalizeState({ mockExam: merged }).mockExam, merged);
+  const updated = { ...remote.completed[11], updatedAt: 9, retries: {} };
+  assert.equal(mergeMockRecords(remote, { completed: { 11: updated } }).completed[11], updated);
 });

@@ -70,6 +70,9 @@ async def main():
         page.once("dialog", lambda dialog: dialog.accept())
         await page.get_by_role("button", name="최종 제출", exact=True).click()
         await expect(first_mark).to_have_attribute("aria-pressed", "true")
+        result = await page.evaluate("key => JSON.parse(localStorage.getItem(key))", STORAGE)
+        assert result["active"] is None
+        assert result["completed"]["12"]["id"] != completed["12"]["id"]
         await back.click()
         await expect(round_bookmark).to_have_text("다시 풀기 1문항")
 
@@ -78,6 +81,19 @@ async def main():
         await expect(review.get_by_text("다시 풀기 표시를 한 문항이 없습니다.")).to_be_visible()
         await back.click()
         await expect(round_bookmark).to_have_count(0)
+
+        expired = {**completed["11"], "id": "expired-off-screen", "round": 10}
+        expired.pop("submittedAt")
+        await page.evaluate("""([key, attempt]) => {
+            const saved = JSON.parse(localStorage.getItem(key));
+            localStorage.setItem(key, JSON.stringify({ ...saved, active: attempt }));
+            history.replaceState(null, '', '#home');
+        }""", [STORAGE, expired])
+        await page.reload()
+        await page.wait_for_function("""key => {
+            const saved = JSON.parse(localStorage.getItem(key));
+            return !saved.active && saved.completed['10']?.id === 'expired-off-screen';
+        }""", arg=STORAGE)
         await browser.close()
         print("PASS: mock question marks, per-round counts, mobile filtered review, reload, resubmission, and removal.")
 

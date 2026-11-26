@@ -8,6 +8,7 @@ import {
   hasRecords,
   downloadState,
 } from "./sync.js";
+import { mergeMockRecords } from "./mock-records.js";
 import "./sync.css";
 
 export function SyncStatus({ controls }) {
@@ -83,7 +84,10 @@ export default function SyncGate({
   function activate(state, remote) {
     revision.current = remote.revision;
     baseline.current = remote.state ? normalizeState(remote.state) : null;
-    snapshot.current = normalizeState(state);
+    snapshot.current = normalizeState({
+      ...state,
+      mockExam: mergeMockRecords(remote.state?.mockExam, snapshot.current.mockExam),
+    });
     blocked.current = false;
     active.current = true;
     setRestored(snapshot.current);
@@ -100,10 +104,14 @@ export default function SyncGate({
     const remote = await api("/state");
     if (!mounted.current) return;
     revision.current = remote.revision;
+    // Exam results are merged independently of the practice record choice.
     if (
       remote.state &&
       (!hasRecords(snapshot.current) ||
-        sameState(snapshot.current, remote.state))
+        sameState(
+          { ...snapshot.current, mockExam: undefined },
+          { ...remote.state, mockExam: undefined },
+        ))
     )
       activate(remote.state, remote);
     else if (!remote.state && !hasRecords(snapshot.current))
@@ -173,6 +181,7 @@ export default function SyncGate({
   }
   flushRef.current = flush;
   const changed = useCallback((state) => {
+    if (sameState(state, snapshot.current)) return;
     snapshot.current = normalizeState(state);
     if (!active.current || blocked.current) return;
     if (!saving.current)
@@ -248,6 +257,11 @@ export default function SyncGate({
       if (useLocal) {
         revision.current = remote.revision;
         baseline.current = remote.state;
+        snapshot.current = normalizeState({
+          ...snapshot.current,
+          mockExam: mergeMockRecords(remote.state?.mockExam, snapshot.current.mockExam),
+        });
+        setRestored((state) => ({ ...state, mockExam: snapshot.current.mockExam }));
         blocked.current = false;
         await flushRef.current();
       } else {

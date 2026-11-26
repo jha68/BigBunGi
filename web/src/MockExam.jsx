@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, ArrowRight, Bookmark, BookmarkCheck, ChevronDown, ClipboardCheck,
   Clock3, ExternalLink, FileSpreadsheet, Flag, Loader2, Play, Terminal,
@@ -9,7 +9,7 @@ import MockQuestionReview from "./MockQuestionReview.jsx";
 import RetryMark from "./RetryMark.jsx";
 import {
   answerStatus, EXAM_SECTIONS, gradeExam, MOCK_CONTENT, MOCK_PREDICTION_FILE,
-  MOCK_STARTER, MOCK_STORAGE, remainingTime,
+  MOCK_STARTER, remainingTime,
 } from "./mock-exam.js";
 import "./mock-exam.css";
 
@@ -30,16 +30,6 @@ function useExamRuns(runner, prefix) {
       current.onClearResults(prefix);
     };
   }, [prefix]);
-}
-
-function readAttempts() {
-  try {
-    const stored = JSON.parse(localStorage.getItem(MOCK_STORAGE));
-    if (stored?.completed && typeof stored.completed === "object") return stored;
-  } catch {
-    // This browser might block storage or contain an older value.
-  }
-  return { active: null, completed: {} };
 }
 
 function useExamFile(load, path) {
@@ -154,7 +144,7 @@ function ExamList({ exams, saved, onSelect, onResume, onResults }) {
   );
 }
 
-function ExamReady({ exam, runtime, onStart, onRestart }) {
+function ExamReady({ exam, runtime, onStart, onRestart, syncEnabled }) {
   return (
     <section className="mock-ready mock-panel" aria-labelledby="mock-ready-heading">
       <time dateTime={exam.date}>{examDate(exam.date)} 시행</time>
@@ -174,7 +164,8 @@ function ExamReady({ exam, runtime, onStart, onRestart }) {
       </dl>
       <ul className="mock-ready-rules">
         <li>수치와 텍스트는 답안란에 입력하세요. 작업형 제2유형은 코드로 <code>{MOCK_PREDICTION_FILE}</code>를 만든 뒤 답안에 등록하세요.</li>
-        <li>답안과 코드는 이 브라우저에 저장됩니다. 화면을 나가거나 새로고침해도 남은 시간은 계속 줄어듭니다.</li>
+        <li>응시 중인 답안과 코드는 이 브라우저에 저장됩니다. 화면을 나가거나 새로고침해도 남은 시간은 계속 줄어듭니다.</li>
+        {syncEnabled && <li>제출 결과와 다시 풀기 표시는 계정에 저장됩니다.</li>}
         <li>작업형 제2유형의 점수 구간은 이 실습 데이터 기준으로 계산합니다.</li>
         {exam.supplementalCount > 0 && (
           <li>공개 복기에서 확인하기 어려운 {exam.supplementalCount}문항은 보완 문제로 표시했습니다.</li>
@@ -445,76 +436,15 @@ function ExamResults({
   );
 }
 
-export default function MockExam({ load, noteRecords, view: selectedView, onNavigate: goTo, ...runner }) {
-  const [saved, setSaved] = useState(readAttempts);
+export default function MockExam({ load, noteRecords, records, syncEnabled, view: selectedView, onNavigate: goTo, ...runner }) {
+  const { saved, saveError, changeSaved, finish } = records;
   const [initialView] = useState(() => saved.active
     ? { mode: "attempt", round: saved.active.round }
     : { mode: "list" });
   const view = selectedView ?? initialView;
-  const [saveError, setSaveError] = useState(false);
-  const state = useRef(saved);
-  const storageFailed = useRef(false);
   const activeId = saved.active?.id;
-  const deadline = saved.active?.deadline;
   const index = useExamFile(load, "index.json");
   const round = useExamFile(load, view.round ? "rounds/" + view.round + ".json" : null);
-
-  const changeSaved = useCallback((change) => {
-    const previous = storageFailed.current ? state.current : readAttempts();
-    const next = change(previous);
-    if (next === previous) return false;
-    try {
-      localStorage.setItem(MOCK_STORAGE, JSON.stringify(next));
-      storageFailed.current = false;
-      setSaveError(false);
-    } catch {
-      storageFailed.current = true;
-      setSaveError(true);
-    }
-    state.current = next;
-    setSaved(next);
-    return true;
-  }, []);
-
-  useEffect(() => {
-    const sync = (event) => {
-      if (event.key !== MOCK_STORAGE || storageFailed.current) return;
-      state.current = readAttempts();
-      setSaved(state.current);
-    };
-    window.addEventListener("storage", sync);
-    return () => window.removeEventListener("storage", sync);
-  }, []);
-
-  const finish = useCallback((id) => {
-    changeSaved((previous) => {
-      const attempt = previous.active;
-      if (!attempt || attempt.id !== id) return previous;
-      return {
-        ...previous,
-        active: null,
-        completed: {
-          ...previous.completed,
-          [attempt.round]: { ...attempt, submittedAt: Math.min(Date.now(), attempt.deadline) },
-        },
-      };
-    });
-  }, [changeSaved]);
-
-  useEffect(() => {
-    if (!activeId) return;
-    function expire() {
-      if (Date.now() >= deadline) finish(activeId);
-    }
-    const timeout = setTimeout(expire, Math.max(0, deadline - Date.now()));
-    const interval = setInterval(expire, 1000);
-    document.addEventListener("visibilitychange", expire);
-    return () => {
-      clearTimeout(timeout);
-      clearInterval(interval);
-      document.removeEventListener("visibilitychange", expire);
-    };
-  }, [activeId, deadline, finish]);
 
   useExamRuns(runner, saved.active && runPrefix(saved.active));
 
@@ -548,7 +478,7 @@ export default function MockExam({ load, noteRecords, view: selectedView, onNavi
         ...previous,
         completed: {
           ...previous.completed,
-          [submitted.round]: { ...attempt, retries: { ...retries, [problemId]: next } },
+          [submitted.round]: { ...attempt, updatedAt: Date.now(), retries: { ...retries, [problemId]: next } },
         },
       };
     });
@@ -560,7 +490,11 @@ export default function MockExam({ load, noteRecords, view: selectedView, onNavi
       const next = markedIds.includes(problemId)
         ? markedIds.filter((id) => id !== problemId)
         : [...markedIds, problemId];
-      return { ...previous, retryMarks: { ...retryMarks, [round]: next } };
+      return {
+        ...previous,
+        retryMarks: { ...retryMarks, [round]: next },
+        retryMarkTimes: { ...previous.retryMarkTimes, [round]: Date.now() },
+      };
     });
   }
   function submit(complete, count) {
@@ -580,7 +514,13 @@ export default function MockExam({ load, noteRecords, view: selectedView, onNavi
           <ArrowLeft size={16} /> 회차 목록
         </button>
       )}
-      {saveError && <p className="mock-error" role="alert">브라우저에 저장하지 못했습니다. 이 탭을 닫으면 작성한 내용이 사라질 수 있습니다.</p>}
+      {saveError && (
+        <p className="mock-error" role="alert">
+          브라우저에 저장하지 못했습니다. {syncEnabled && !attempt
+            ? "제출 결과는 상단의 서버 저장 상태를 확인해 주세요."
+            : "이 탭을 닫으면 작성한 내용이 사라질 수 있습니다."}
+        </p>
+      )}
       {view.mode === "list" ? (
         <LoadState {...index}>
           {(exams) => (
@@ -594,7 +534,7 @@ export default function MockExam({ load, noteRecords, view: selectedView, onNavi
         <LoadState {...round}>
           {(exam) => {
             if (view.mode === "prepare") {
-              return <ExamReady exam={exam} runtime={runner.runtime} onRestart={runner.onRestartRuntime} onStart={() => start(exam)} />;
+              return <ExamReady exam={exam} runtime={runner.runtime} onRestart={runner.onRestartRuntime} onStart={() => start(exam)} syncEnabled={syncEnabled} />;
             }
             if (view.mode === "attempt" && attempt) {
               return (

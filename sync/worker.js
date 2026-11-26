@@ -3,6 +3,7 @@ const DAY = 86400;
 const MAX_BODY = 1024 * 1024;
 const PRACTICE_PROBLEM_ID = /^t[123]-\d{2}$/;
 const MOCK_PROBLEM_ID = /^r(?:0[2-5]-(?:0[1-9]|1[0-4])|(?:0[6-9]|1[0-2])-0[1-6])$/;
+const MOCK_ROUND = /^(?:[2-9]|1[0-2])$/;
 const encoder = new TextEncoder();
 const hex = (bytes) =>
   [...new Uint8Array(bytes)]
@@ -195,6 +196,42 @@ function validProblemKeys(values, allowMock) {
   );
 }
 
+function isRecord(value) {
+  return value && typeof value === "object" && !Array.isArray(value);
+}
+
+function validMockRecords(value) {
+  if (!isRecord(value) || Object.keys(value).some(
+    (key) => !["completed", "retryMarks", "retryMarkTimes"].includes(key),
+  )) return false;
+  const timestamp = (time) => Number.isSafeInteger(time) && time >= 0;
+  const rounds = (map, valid) => isRecord(map) && Object.entries(map).every(
+    ([round, entry]) => MOCK_ROUND.test(round) && valid(round, entry),
+  );
+  const inRound = (round, id) => typeof id === "string" &&
+    MOCK_PROBLEM_ID.test(id) && Number(id.slice(1, 3)) === Number(round);
+  const questionMap = (round, map, valid) => isRecord(map) && Object.entries(map).every(
+    ([id, entry]) => inRound(round, id) && valid(entry),
+  );
+  return rounds(value.completed, (round, attempt) => (
+    isRecord(attempt) && attempt.round === Number(round) &&
+    Object.keys(attempt).every((key) => [
+      "id", "round", "startedAt", "deadline", "submittedAt", "updatedAt",
+      "index", "answers", "code", "files", "flags", "memo", "retries",
+    ].includes(key)) &&
+    typeof attempt.id === "string" && attempt.id.length > 0 && attempt.id.length <= 128 &&
+    [attempt.startedAt, attempt.deadline, attempt.submittedAt].every(timestamp) &&
+    (attempt.updatedAt === undefined || timestamp(attempt.updatedAt)) &&
+    questionMap(round, attempt.answers, isRecord) &&
+    questionMap(round, attempt.code, (code) => typeof code === "string") &&
+    questionMap(round, attempt.files, isRecord) &&
+    (attempt.flags === undefined || questionMap(round, attempt.flags, (flag) => typeof flag === "boolean")) &&
+    (attempt.retries === undefined || questionMap(round, attempt.retries, isRecord))
+  )) && rounds(value.retryMarks, (round, ids) => (
+    Array.isArray(ids) && ids.length <= 14 && ids.every((id) => inRound(round, id))
+  )) && rounds(value.retryMarkTimes, (_round, time) => timestamp(time));
+}
+
 export function validState(state) {
   if (!state || typeof state !== "object" || Array.isArray(state)) return false;
   const fields = [
@@ -204,8 +241,10 @@ export function validState(state) {
     "progress",
     "selected",
     "highlights",
+    "mockExam",
   ];
   if (Object.keys(state).some((key) => !fields.includes(key))) return false;
+  if (state.mockExam !== undefined && !validMockRecords(state.mockExam)) return false;
   if (
     state.selected != null &&
     state.selected !== "home" &&
@@ -583,9 +622,14 @@ export default {
             400,
           );
         const updatedAt = new Date().toISOString();
-        const changed = await env.DB.prepare(
-          "UPDATE practice SET data = ?, revision = revision + 1, updated_at = ? WHERE id = 'owner' AND revision = ?",
-        )
+        // Older open tabs omit mockExam from their practice snapshot.
+        const changed = await env.DB.prepare(`
+          UPDATE practice SET
+            data = CASE WHEN json_type(?1, '$.mockExam') IS NULL AND json_type(data, '$.mockExam') = 'object'
+              THEN json_set(?1, '$.mockExam', json_extract(data, '$.mockExam')) ELSE ?1 END,
+            revision = revision + 1, updated_at = ?2
+          WHERE id = 'owner' AND revision = ?3
+        `)
           .bind(JSON.stringify(state), updatedAt, revision)
           .run();
         if (changed.meta.changes !== 1)

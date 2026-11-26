@@ -1,6 +1,5 @@
 import { DECIMAL_ANSWER, gradeNumeric, gradePrediction } from "./grading.js";
 
-export const MOCK_STORAGE = "bigbungi.mock-exam.v1";
 export const MOCK_CONTENT = "content/mock-exams";
 export const MOCK_PREDICTION_FILE = "result.csv";
 export const MOCK_STARTER = "# Python 코드를 작성하세요.\n";

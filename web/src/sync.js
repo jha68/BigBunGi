@@ -1,3 +1,5 @@
+import { mockRecords } from "./mock-records.js";
+
 export const SYNC_URL = (import.meta.env?.VITE_SYNC_API_URL || "").replace(
   /\/$/,
   "",
@@ -50,6 +52,7 @@ export async function syncRequest(
 }
 export function normalizeState(value = {}) {
   value ||= {};
+  const mockExam = mockRecords(value.mockExam);
   return {
     drafts: value.drafts || {},
     answers: value.answers || {},
@@ -57,6 +60,9 @@ export function normalizeState(value = {}) {
     highlights: value.highlights || {},
     progress: value.progress || {},
     selected: value.selected || "t1-01",
+    ...(Object.keys(mockExam.completed).length || Object.keys(mockExam.retryMarks).length
+      ? { mockExam }
+      : {}),
   };
 }
 export function sameState(a, b) {

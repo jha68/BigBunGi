@@ -66,11 +66,11 @@ async def main():
         async def login(page, password=PASSWORD):
             await page.get_by_label("비밀번호", exact=True).fill(password)
             await page.get_by_role("button", name="로그인", exact=True).click()
-        async def saved(page):
+        async def saved(page, retry_timeout=800):
             await page.locator(".sync-status.saved").wait_for(timeout=15000)
             await page.locator(".problem-heading").wait_for()
             try:
-                await page.get_by_role("button", name="이어서 풀기", exact=True).wait_for(timeout=800)
+                await page.get_by_role("button", name="이어서 풀기", exact=True).wait_for(timeout=retry_timeout)
                 await page.get_by_role("button", name="이어서 풀기", exact=True).click()
             except PlaywrightTimeoutError:
                 pass
@@ -245,12 +245,60 @@ async def main():
         assert await page.locator(".gemini-turn").count() == 4
         page.once("dialog", lambda dialog: dialog.accept())
         await page.get_by_role("button", name="이 문제의 AI 대화 지우기", exact=True).click(); await conversation_saved(page)
-        await page.reload(); await saved(page)
+        await page.reload(); await saved(page, retry_timeout=5000)
         await page.get_by_role("tab", name="AI 질문", exact=True).click(); await conversation_saved(page)
         assert await page.locator(".gemini-turn").count() == 0
         print("PASS: AI history survives logout/login and Gemini key deletion; explicit conversation deletion persists after refresh.", flush=True)
         print("PASS: key/model survive logout and another device; explicit deletion persists after refresh.", flush=True)
         print("PASS: mobile layout, logout removes session and app access, password never stored in browser storage.", flush=True)
+
+        old_mock = {"active": None, "completed": {"11": {
+            "id": "legacy-result", "round": 11, "startedAt": 1000, "deadline": 10801000,
+            "submittedAt": 2000, "index": 0, "answers": {}, "code": {}, "files": {}, "flags": {}, "memo": "",
+        }}, "retryMarks": {"11": ["r11-01"]}}
+        c = await context()
+        await c.add_init_script(f"localStorage.setItem('bigbungi.mock-exam.v1', {json.dumps(json.dumps(old_mock))});")
+        exam_page = await c.new_page()
+        await exam_page.goto(ORIGIN + "/#mock-exam")
+        await login(exam_page)
+        await expect(exam_page.locator(".sync-status.saved")).to_be_visible(timeout=15000)
+
+        def mock_round(exam_page, number):
+            return exam_page.locator(".mock-round").filter(
+                has=exam_page.get_by_role("heading", name=f"제{number}회", exact=True),
+            )
+
+        await expect(mock_round(exam_page, 11).get_by_role("button", name="다시 풀기 1문항")).to_be_visible()
+        await exam_page.evaluate("""() => {
+            const set = Storage.prototype.setItem;
+            Storage.prototype.setItem = function(key, value) {
+                if (key === 'bigbungi.mock-exam.v1') throw new DOMException('Full', 'QuotaExceededError');
+                return set.call(this, key, value);
+            };
+        }""")
+        await mock_round(exam_page, 12).get_by_role("button", name="응시 준비").click()
+        await exam_page.get_by_role("button", name="시험 시작", exact=True).click(timeout=120000)
+        await edit(exam_page, 'print("SAVED_MOCK_CODE")')
+        first_answer = exam_page.locator(".mock-answer-fields input").first
+        await first_answer.fill("42")
+        exam_page.once("dialog", lambda dialog: dialog.accept())
+        await exam_page.get_by_role("button", name="최종 제출", exact=True).click()
+        await exam_page.get_by_role("heading", name="제12회 채점 결과").wait_for()
+        await expect(exam_page.locator(".sync-status.saved")).to_be_visible(timeout=15000)
+
+        d = await context()
+        restored_exam = await d.new_page()
+        await restored_exam.goto(ORIGIN + "/#mock-exam")
+        await login(restored_exam)
+        await expect(mock_round(restored_exam, 11).get_by_role("button", name="다시 풀기 1문항")).to_be_visible()
+        await mock_round(restored_exam, 12).get_by_role("button", name="최근 결과").click()
+        await restored_exam.get_by_role("heading", name="제12회 채점 결과").wait_for()
+        await restored_exam.locator(".mock-review-expand").first.click()
+        await expect(restored_exam.get_by_role("textbox", name="내 Python 코드", exact=True)).to_contain_text("SAVED_MOCK_CODE")
+        assert await restored_exam.evaluate("""() => Object.values(
+            JSON.parse(localStorage.getItem('bigbungi.mock-exam.v1')).completed['12'].answers['r12-01']
+        ).includes('42')""")
+        print("PASS: legacy mock results migrate and a newly submitted result with answers and code reaches another device even when browser writes fail.", flush=True)
         await browser.close()
 
 if __name__ == "__main__":

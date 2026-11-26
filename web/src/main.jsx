@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   ArrowDownToLine,
@@ -43,6 +43,8 @@ import { GeminiProvider, GeminiTutor } from "./GeminiTutor.jsx";
 import PracticeNotes from "./PracticeNotes.jsx";
 import HomeScreen from "./HomeScreen.jsx";
 import MockExam from "./MockExam.jsx";
+import { mockRecords, readMockExam } from "./mock-records.js";
+import useMockExam from "./useMockExam.js";
 import RetryMark from "./RetryMark.jsx";
 import { gradeNumeric, gradePrediction } from "./grading.js";
 import SyncGate, { SyncStatus } from "./SyncGate.jsx";
@@ -72,7 +74,7 @@ function savedState() {
     return {};
   }
 }
-const initial = savedState();
+const initial = { ...savedState(), mockExam: mockRecords(readMockExam()) };
 async function jsonFile(path) {
   const r = await fetch(BASE + path);
   if (!r.ok)
@@ -177,6 +179,8 @@ function App({ initialState = initial, onStateChange, syncControls }) {
   const [aiExpanded, setAiExpanded] = useState(false);
   const [homeMode, setHomeMode] = useState("overview");
   const [mockExamView, setMockExamView] = useState(null);
+  const mockExam = useMockExam(initialState.mockExam);
+  const { completed, retryMarks, retryMarkTimes } = mockExam.saved;
   const [retryProblem, setRetryProblem] = useState(null);
   const [solutions, setSolutions] = useState({}),
     [fileIndex, setFileIndex] = useState(0);
@@ -324,29 +328,23 @@ function App({ initialState = initial, onStateChange, syncControls }) {
     )
       setRetryProblem(problem);
   }, [problem?.id]);
+  const practiceSelected = practiceSelection.current;
+  const practiceSnapshot = useMemo(() => ({
+    drafts, answers, notes, highlights, progress,
+    selected: practiceSelected,
+  }), [drafts, answers, notes, highlights, progress, practiceSelected]);
   useEffect(() => {
-    const snapshot = {
-      drafts, answers, notes, highlights, progress,
-      selected: practiceSelection.current,
-    };
     try {
-      localStorage.setItem(STORAGE, JSON.stringify(snapshot));
+      localStorage.setItem(STORAGE, JSON.stringify(practiceSnapshot));
     } catch {
       notify(
         "브라우저 저장 공간이 부족해 자동 저장하지 못했습니다. 코드를 다운로드해 주세요.",
       );
     }
-    onStateChange?.(snapshot);
-  }, [
-    drafts,
-    answers,
-    notes,
-    highlights,
-    progress,
-    selected,
-    notify,
-    onStateChange,
-  ]);
+  }, [practiceSnapshot, notify]);
+  useEffect(() => {
+    onStateChange?.({ ...practiceSnapshot, mockExam: { completed, retryMarks, retryMarkTimes } });
+  }, [practiceSnapshot, completed, retryMarks, retryMarkTimes, onStateChange]);
 
   const startWorker = useCallback(() => {
     worker.current?.terminate();
@@ -936,6 +934,8 @@ function App({ initialState = initial, onStateChange, syncControls }) {
           <MockExam
             load={jsonFile}
             noteRecords={noteRecords}
+            records={mockExam}
+            syncEnabled={Boolean(syncControls)}
             view={mockExamView}
             onNavigate={navigateMockExam}
             runtime={runtime}

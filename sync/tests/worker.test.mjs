@@ -527,6 +527,26 @@ test("mock review notes, highlights and encrypted conversations use the existing
   assert.deepEqual((await (await call("/conversations")).json()).records.map(({ id }) => id), ["t1-01"]);
 });
 
+test("submitted mock exams survive account sync and saves from older tabs", async () => {
+  const remote = await (await call("/state")).json();
+  const mockExam = {
+    completed: { 12: {
+      id: "mock-attempt", round: 12, startedAt: 1000, deadline: 9000, submittedAt: 8000,
+      answers: { "r12-01": { answer: "8" } }, code: { "r12-01": "print(8)" }, files: {},
+    } },
+    retryMarks: { 12: ["r12-01"] }, retryMarkTimes: { 12: 9000 },
+  };
+  const saved = await call("/state", "PUT", { revision: remote.revision, state: { ...remote.state, mockExam } });
+  assert.equal(saved.status, 200);
+  const oldTab = await call("/state", "PUT", { revision: remote.revision + 1, state: remote.state });
+  assert.equal(oldTab.status, 200);
+  assert.deepEqual((await (await call("/state")).json()).state.mockExam, mockExam);
+  const wrongRound = { ...mockExam, retryMarks: { 11: ["r12-01"] } };
+  assert.equal((await call("/state", "PUT", {
+    revision: remote.revision + 2, state: { ...remote.state, mockExam: wrongRound },
+  })).status, 400);
+});
+
 test("logout invalidates sessions, expired sessions are rejected, and wrong passwords are rate limited", async () => {
   assert.equal((await call("/logout", "POST", {})).status, 200);
   assert.equal((await call("/session")).status, 401);
