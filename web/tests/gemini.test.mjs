@@ -79,6 +79,31 @@ test("multi-turn request uses only completed turns and latest code, and redacts 
   );
 });
 
+test("submitted mock review includes that question's grade and reference, with key redaction", () => {
+  const item = { ...problem, id: "r12-01" };
+  const code = "print(15)";
+  const review = {
+    round: 12,
+    questionNumber: 1,
+    earnedPoints: 0,
+    availablePoints: 10,
+    answers: [{ label: "행 개수", actual: 15, expected: 18, correct: false }],
+    referenceCode: "print(18)\n# " + key,
+  };
+  const context = makeContext(item, code, null, false, review);
+  const payload = makeRequest({ context, question: "두 코드가 어떻게 달라?", apiKey: key });
+  const input = JSON.parse(payload.contents.at(-1).parts[0].text.split("\n")[1]);
+  assert.equal(input.problem.id, item.id);
+  assert.equal(input.currentCode, code);
+  assert.equal(input.examReview.referenceCode, "print(18)\n# [API_KEY_REDACTED]");
+  assert.deepEqual(input.examReview.answers, review.answers);
+  assert.equal(input.lastExecution, undefined);
+  assert.match(payload.systemInstruction.parts[0].text, /모의시험 제출 후 복습 화면/);
+  assert.doesNotMatch(payload.systemInstruction.parts[0].text, /오른쪽 코드 실행 버튼/);
+  assert.doesNotMatch(JSON.stringify(payload), /DO_NOT_SEND/);
+  assert.equal(makeContext(item, code, null).examReview, undefined);
+});
+
 test("model listing authenticates in a header, handles pagination and selects supported text models", async () => {
   const seen = [];
   const models = await listModels(key, undefined, async (url, options) => {

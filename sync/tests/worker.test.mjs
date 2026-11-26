@@ -490,6 +490,43 @@ test("study index and home chat stay private and separate; highlights survive st
   );
 });
 
+test("mock review notes, highlights and encrypted conversations use the existing authenticated storage", async () => {
+  const remote = await (await call("/state")).json();
+  const id = "r12-06";
+  const highlight = { ...remote.state.highlights["t1-01"][0] };
+  const updated = {
+    ...remote.state,
+    notes: { ...remote.state.notes, [id]: "모의시험 복습 노트" },
+    highlights: { ...remote.state.highlights, [id]: [highlight] },
+  };
+  assert.equal(
+    (await call("/state", "PUT", { revision: remote.revision, state: updated })).status,
+    200,
+  );
+  assert.deepEqual((await (await call("/state")).json()).state, updated);
+  for (const state of [
+    { ...updated, notes: { "r12-07": "문항 범위 밖" } },
+    { ...updated, drafts: { [id]: "코드는 브라우저 시험 기록" } },
+  ]) {
+    assert.equal((await call("/state", "PUT", { revision: remote.revision + 1, state })).status, 400);
+  }
+
+  const turn = {
+    id: "mock-turn-1", question: "내 코드가 틀린 이유는?", answer: "반올림 순서를 확인하세요.",
+    error: "", status: "complete", model: "models/gemini-2.5-flash",
+    contextLines: 3, withExecution: false, at: "2026-11-26T00:00:00Z",
+  };
+  const path = "/conversations/" + id;
+  assert.equal((await call(path, "GET", undefined, null)).status, 401);
+  assert.equal((await call(path, "PUT", { revision: 0, turns: [turn] })).status, 200);
+  assert.deepEqual(await (await call(path)).json(), { revision: 1, turns: [turn] });
+  const row = await db.prepare("SELECT data FROM conversations WHERE id = ?").bind(id).first();
+  assert.equal(row.data.includes(turn.question), false);
+  assert.equal((await call("/conversations/r04-14")).status, 200);
+  assert.equal((await call("/conversations/r12-07")).status, 404);
+  assert.deepEqual((await (await call("/conversations")).json()).records.map(({ id }) => id), ["t1-01"]);
+});
+
 test("logout invalidates sessions, expired sessions are rejected, and wrong passwords are rate limited", async () => {
   assert.equal((await call("/logout", "POST", {})).status, 200);
   assert.equal((await call("/session")).status, 401);

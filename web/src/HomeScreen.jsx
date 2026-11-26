@@ -47,9 +47,10 @@ export default function HomeScreen({
   syncStatus,
 }) {
   const studyData = { catalog, notes, highlights, progress, syncStatus };
-  const highlightCount = Object.entries(highlights).reduce(
-    (sum, [pid, items]) =>
-      sum + activeHighlights(notes[pid] || "", items).length,
+  const noteCount = catalog.filter(({ id }) => notes[id]?.trim()).length;
+  const highlightCount = catalog.reduce(
+    (sum, { id }) =>
+      sum + activeHighlights(notes[id] || "", highlights[id] || []).length,
     0,
   );
   const solved = catalog.filter(
@@ -95,7 +96,7 @@ export default function HomeScreen({
             <span>
               작성한 노트{" "}
               <strong>
-                {Object.values(notes).filter((note) => note.trim()).length}
+                {noteCount}
               </strong>
             </span>
             <span>

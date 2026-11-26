@@ -346,13 +346,14 @@ export function GeminiProvider({
     includeExecution,
     retryId,
     studyData,
+    examReview,
   }) {
     if (request.current || connection.status !== "ready") return;
     if (!historyStore.ready(problem.id))
       return "AI 대화 저장·복원이 완료된 뒤 다시 보내 주세요.";
     let context;
     try {
-      context = makeContext(problem, code, result, includeExecution);
+      context = makeContext(problem, code, result, includeExecution, examReview);
     } catch (error) {
       return error.message;
     }
@@ -711,6 +712,7 @@ export function GeminiTutor({
   onExpandedChange,
   studyData,
   onSelectProblem,
+  examReview,
 }) {
   const tutor = useContext(TutorContext);
   const isStudy = !!studyData;
@@ -765,6 +767,7 @@ export function GeminiTutor({
       includeExecution,
       retryId,
       studyData,
+      examReview,
     });
     if (error) setFormError(error);
   }
@@ -1026,6 +1029,8 @@ export function GeminiTutor({
           <span className="context-dot" />
           {isStudy ? (
             "전체 문제의 질문 기록 · 노트 · 형광펜 참고"
+          ) : examReview ? (
+            "제출한 코드 · 기준 풀이 · 채점 결과 첨부"
           ) : (
             <>현재 문제 + 최신 코드 {code.split("\n").length}줄 첨부</>
           )}
@@ -1038,9 +1043,11 @@ export function GeminiTutor({
           <p>
             {isStudy
               ? "전송할 때마다 최신 노트·강조 내용과 저장된 문제별 질문 이력을 조회합니다. 전체 코드는 보내지 않습니다."
-              : "수행 조건 · 변수 설명 · 데이터 미리보기 · 현재 코드"}
+              : examReview
+                ? "문제 조건 · 데이터 열 설명 · 제출한 코드 · 이 문항의 기준 풀이와 채점 결과"
+                : "수행 조건 · 변수 설명 · 데이터 미리보기 · 현재 코드"}
           </p>
-          {!isStudy && (
+          {!isStudy && !examReview && (
             <>
               <label>
                 <input

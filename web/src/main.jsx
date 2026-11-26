@@ -692,6 +692,22 @@ function App({ initialState = initial, onStateChange, syncControls }) {
   const currentAnswers = answers[selected] || {};
   const activeFile = problem?.files[fileIndex] || problem?.files[0];
   const currentProgress = progress[problem?.id];
+  const noteRecords = {
+    notes,
+    highlights,
+    updateNote(id, text) {
+      setNotes((previous) => ({ ...previous, [id]: text }));
+    },
+    appendNote(id, text) {
+      setNotes((previous) => ({
+        ...previous,
+        [id]: [previous[id], text].filter(Boolean).join("\n\n"),
+      }));
+    },
+    updateHighlights(id, items) {
+      setHighlights((previous) => ({ ...previous, [id]: items }));
+    },
+  };
 
   return (
     <div className={`app-shell ${navCollapsed ? "sidebar-collapsed" : ""}`}>
@@ -927,6 +943,7 @@ function App({ initialState = initial, onStateChange, syncControls }) {
         {inMockExam ? (
           <MockExam
             load={jsonFile}
+            noteRecords={noteRecords}
             runtime={runtime}
             running={running}
             results={results}
@@ -1162,26 +1179,11 @@ function App({ initialState = initial, onStateChange, syncControls }) {
                       value={notes[problem.id] || ""}
                       highlights={highlights[problem.id] || []}
                       onHighlightsChange={(items) =>
-                        setHighlights((previous) => ({
-                          ...previous,
-                          [problem.id]: items,
-                        }))
+                        noteRecords.updateHighlights(problem.id, items)
                       }
-                      onChange={(text) =>
-                        setNotes((previous) => ({
-                          ...previous,
-                          [problem.id]: text,
-                        }))
-                      }
+                      onChange={(text) => noteRecords.updateNote(problem.id, text)}
                       onOpenAI={() => setLeftTab("ai")}
-                      onAppend={(text) =>
-                        setNotes((previous) => ({
-                          ...previous,
-                          [problem.id]: [previous[problem.id], text]
-                            .filter(Boolean)
-                            .join("\n\n"),
-                        }))
-                      }
+                      onAppend={(text) => noteRecords.appendNote(problem.id, text)}
                     />
                   )}
                   {leftTab === "solution" && solutions[selected] && (

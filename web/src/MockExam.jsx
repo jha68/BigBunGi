@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, ClipboardCheck,
+  ArrowLeft, ArrowRight, ChevronDown, ClipboardCheck,
   Clock3, ExternalLink, FileSpreadsheet, Flag, Loader2, Play, Square, Terminal,
 } from "lucide-react";
 import CodeEditor from "./CodeEditor.jsx";
+import MockQuestionReview from "./MockQuestionReview.jsx";
 import {
   answerStatus, EXAM_SECTIONS, gradeExam, MOCK_CONTENT, MOCK_STORAGE, remainingTime,
 } from "./mock-exam.js";
@@ -389,66 +390,76 @@ function ExamWorkspace({ exam, attempt, update, onSubmit, runner }) {
   );
 }
 
-function ExamResults({ exam, attempt, load }) {
+function ExamResults({ exam, attempt, load, noteRecords }) {
+  const [openId, setOpenId] = useState(null);
   const info = useExamFile(load, "keys/" + exam.round + ".json");
+  const keys = info.response?.data;
+  const grade = useMemo(
+    () => keys && gradeExam(exam.questions, keys, attempt),
+    [exam.questions, keys, attempt],
+  );
   return (
     <LoadState {...info}>
-      {(keys) => {
-        const grade = gradeExam(exam.questions, keys, attempt);
-        return (
-          <section className="mock-results">
-            <header className="mock-panel mock-result-header">
-              <div>
-                <time dateTime={exam.date}>{examDate(exam.date)} 시행</time>
-                <h1>제{exam.round}회 채점 결과</h1>
-                <p>{attempt.submittedAt >= attempt.deadline ? "시간 종료로 자동 제출됨" : "시험 제출 완료"} · 60점 이상 모의시험 통과</p>
-              </div>
-              <div className={grade.total >= 60 ? "mock-score passed" : "mock-score"}>
-                <strong>{grade.total}</strong><span> / 100점</span>
-              </div>
-            </header>
-            <SourceLinks exam={exam} />
-            <div className="mock-review">
-              {exam.questions.map((item, index) => {
-                const evaluated = grade.questions[index];
-                const solution = keys[item.id].code;
-                return (
-                  <details className="mock-panel" key={item.id}>
-                    <summary>
-                      <span><strong>{index + 1}. {item.title}</strong><small>{EXAM_SECTIONS[item.type]}{!item.recalled && " · 보완 문항"}</small></span>
-                      <span>{evaluated.earned} / {item.points}점 <ChevronDown size={15} aria-hidden="true" /></span>
-                    </summary>
-                    <div className="mock-review-body">
-                      {item.scenario && <p>{item.scenario}</p>}
-                      <ol>{item.steps.map((step) => <li key={step}>{step}</li>)}</ol>
-                      {evaluated.details?.map((detail) => (
-                        <div key={detail.key} className="mock-answer-review">
-                          {detail.correct ? <CheckCircle2 size={17} /> : <span className="mock-error">오답</span>}
-                          <strong>{detail.label}</strong>
-                          <span>제출 {detail.actual ?? "미입력"}</span>
-                          <span>정답 {detail.expected}</span>
-                          {detail.formatError && <small className="mock-error">{detail.formatError}</small>}
-                        </div>
-                      ))}
-                      {evaluated.metric != null && (
-                        <p>{evaluated.metricName} <strong>{evaluated.metric.toFixed(4)}</strong> · 모의 만점 기준 {evaluated.threshold.toFixed(4)} {evaluated.higher ? "이상" : "이하"}</p>
-                      )}
-                      {evaluated.error && <p className="mock-error">{evaluated.error}</p>}
-                      {solution && <details className="mock-solution"><summary>기준 풀이 코드</summary><pre>{solution}</pre></details>}
-                      {attempt.code[item.id] && <details className="mock-solution"><summary>내 코드</summary><pre>{attempt.code[item.id]}</pre></details>}
-                    </div>
-                  </details>
-                );
-              })}
+      {() => (
+        <section className="mock-results">
+          <header className="mock-panel mock-result-header">
+            <div>
+              <time dateTime={exam.date}>{examDate(exam.date)} 시행</time>
+              <h1>제{exam.round}회 채점 결과</h1>
+              <p>
+                {attempt.submittedAt >= attempt.deadline
+                  ? "시간 종료로 자동 제출됨"
+                  : "시험 제출 완료"}{" "}
+                · 60점 이상 모의시험 통과
+              </p>
             </div>
-          </section>
-        );
-      }}
+            <div className={grade.total >= 60 ? "mock-score passed" : "mock-score"}>
+              <strong>{grade.total}</strong><span> / 100점</span>
+            </div>
+          </header>
+          <SourceLinks exam={exam} />
+          <div className="mock-review">
+            {exam.questions.map((item, index) => {
+              const evaluated = grade.questions[index];
+              const open = openId === item.id;
+              return (
+                <details className="mock-panel" key={item.id} open={open}>
+                  <summary
+                    onClick={(event) => {
+                      event.preventDefault();
+                      setOpenId(open ? null : item.id);
+                    }}
+                  >
+                    <span>
+                      <strong>{index + 1}. {item.title}</strong>
+                      <small>{EXAM_SECTIONS[item.type]}{!item.recalled && " · 보완 문항"}</small>
+                    </span>
+                    <span>
+                      {evaluated.earned} / {item.points}점 <ChevronDown size={15} aria-hidden="true" />
+                    </span>
+                  </summary>
+                  {open && (
+                    <MockQuestionReview
+                      problem={item}
+                      round={exam.round}
+                      questionNumber={index + 1}
+                      grade={evaluated}
+                      submittedCode={attempt.code[item.id]}
+                      referenceCode={keys[item.id].code}
+                      noteRecords={noteRecords}
+                    />
+                  )}
+                </details>
+              );
+            })}
+          </div>
+        </section>
+      )}
     </LoadState>
   );
 }
 
-export default function MockExam({ load, ...runner }) {
+export default function MockExam({ load, noteRecords, ...runner }) {
   const [saved, setSaved] = useState(readAttempts);
   const [view, setView] = useState(() => saved.active
     ? { mode: "attempt", round: saved.active.round }
@@ -590,7 +601,17 @@ export default function MockExam({ load, ...runner }) {
                   onSubmit={(complete) => submit(complete, exam.questions.length)} />
               );
             }
-            if (submitted) return <ExamResults key={submitted.id} exam={exam} attempt={submitted} load={load} />;
+            if (submitted) {
+              return (
+                <ExamResults
+                  key={submitted.id}
+                  exam={exam}
+                  attempt={submitted}
+                  load={load}
+                  noteRecords={noteRecords}
+                />
+              );
+            }
             return <p className="mock-status">응시 기록이 없습니다.</p>;
           }}
         </LoadState>

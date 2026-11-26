@@ -126,7 +126,7 @@
   color: var(--mock-muted);
   font-size: 12px;
 }
-.mock-sources summary, .mock-dataset summary, .mock-solution summary, .mock-memo summary {
+.mock-sources summary, .mock-dataset summary, .mock-memo summary {
   cursor: pointer;
   padding: 5px 0;
   font-weight: 650;
@@ -480,7 +480,7 @@
   color: var(--mock-muted);
   font-size: 12px;
 }
-.mock-console pre, .mock-solution pre {
+.mock-console pre {
   margin: 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -556,9 +556,13 @@
   margin-left: 7px;
   color: var(--mock-muted);
 }
-.mock-review-body {
-  padding: 11px 15px 15px;
+.mock-review-tabs {
+  padding-inline: 15px;
   border-top: 1px solid var(--mock-border);
+}
+.mock-review-body {
+  padding: 15px;
+  min-width: 0;
 }
 .mock-answer-review {
   display: flex;
@@ -572,14 +576,38 @@
 .mock-answer-review svg {
   color: var(--mock-green);
 }
-.mock-solution {
-  margin-top: 8px;
+.mock-review-code {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 12px;
+  margin-top: 15px;
 }
-.mock-solution pre {
-  padding: 12px;
-  border-radius: 5px;
-  background: #1b283a;
-  color: #dfebf7;
+.mock-review-code section {
+  min-width: 0;
+}
+.mock-review-code h3 {
+  margin: 0 0 6px;
+  color: #354d67;
+  font-size: 13px;
+}
+.mock-review-code .reference-code {
+  margin: 0;
+}
+.mock-review-code .cm-gutters {
+  padding-block: 0;
+}
+.mock-review-ai .gemini-panel {
+  height: auto;
+}
+.mock-review-ai .gemini-messages {
+  min-height: 170px;
+  max-height: min(52vh, 500px);
+}
+.mock-review-ai.gemini-expanded .gemini-panel {
+  min-height: min(72dvh, 720px);
+}
+.mock-review-ai.gemini-expanded .gemini-messages {
+  max-height: min(64dvh, 650px);
 }
 @media (max-width: 1010px) {
   .mock-workspace {

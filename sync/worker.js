@@ -1,6 +1,8 @@
 const COOKIE = "__Host-bigbungi-session";
 const DAY = 86400;
 const MAX_BODY = 1024 * 1024;
+const PRACTICE_PROBLEM_ID = /^t[123]-\d{2}$/;
+const MOCK_PROBLEM_ID = /^r(?:0[2-5]-(?:0[1-9]|1[0-4])|(?:0[6-9]|1[0-2])-0[1-6])$/;
 const encoder = new TextEncoder();
 const hex = (bytes) =>
   [...new Uint8Array(bytes)]
@@ -185,6 +187,14 @@ async function validPassword(password, record) {
   return difference === 0;
 }
 
+function validProblemKeys(values, allowMock) {
+  const ids = Object.keys(values);
+  return (
+    ids.filter((id) => PRACTICE_PROBLEM_ID.test(id)).length <= 100 &&
+    ids.every((id) => PRACTICE_PROBLEM_ID.test(id) || (allowMock && MOCK_PROBLEM_ID.test(id)))
+  );
+}
+
 export function validState(state) {
   if (!state || typeof state !== "object" || Array.isArray(state)) return false;
   const fields = [
@@ -199,18 +209,14 @@ export function validState(state) {
   if (
     state.selected != null &&
     state.selected !== "home" &&
-    !/^t[123]-\d{2}$/.test(state.selected)
+    !PRACTICE_PROBLEM_ID.test(state.selected)
   )
     return false;
   for (const field of fields.slice(0, 4)) {
     const values = state[field];
     if (!values || typeof values !== "object" || Array.isArray(values))
       return false;
-    if (
-      Object.keys(values).length > 100 ||
-      Object.keys(values).some((key) => !/^t[123]-\d{2}$/.test(key))
-    )
-      return false;
+    if (!validProblemKeys(values, field === "notes")) return false;
     if (
       (field === "drafts" || field === "notes") &&
       Object.values(values).some((value) => typeof value !== "string")
@@ -222,16 +228,11 @@ export function validState(state) {
       !state.highlights ||
       typeof state.highlights !== "object" ||
       Array.isArray(state.highlights) ||
-      Object.keys(state.highlights).length > 100
+      !validProblemKeys(state.highlights, true)
     )
       return false;
-    for (const [pid, items] of Object.entries(state.highlights)) {
-      if (
-        !/^t[123]-\d{2}$/.test(pid) ||
-        !Array.isArray(items) ||
-        items.length > 100
-      )
-        return false;
+    for (const items of Object.values(state.highlights)) {
+      if (!Array.isArray(items) || items.length > 100) return false;
       if (
         items.some(
           (item) =>
@@ -458,7 +459,7 @@ export default {
         const records = [],
           unavailable = [];
         for (const row of rows.results) {
-          if (!/^t[123]-\d{2}$/.test(row.id)) continue;
+          if (!PRACTICE_PROBLEM_ID.test(row.id)) continue;
           try {
             const turns = await decryptSettings(
               row.data,
@@ -484,9 +485,12 @@ export default {
         }
         return reply({ records, unavailable });
       }
-      const conversation = /^\/conversations\/(t[123]-\d{2}|home)$/.exec(path);
-      if (conversation && ["GET", "PUT"].includes(request.method)) {
-        const pid = conversation[1];
+      const pid = /^\/conversations\/([^/]+)$/.exec(path)?.[1];
+      if (
+        pid &&
+        (pid === "home" || PRACTICE_PROBLEM_ID.test(pid) || MOCK_PROBLEM_ID.test(pid)) &&
+        ["GET", "PUT"].includes(request.method)
+      ) {
         if (!/^[a-f0-9]{64}$/.test(env.HISTORY_KEY || ""))
           return reply(
             { error: "AI 대화 저장소 설정이 완료되지 않았습니다." },
