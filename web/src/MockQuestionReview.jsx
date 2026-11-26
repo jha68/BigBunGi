@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
-import { BookOpen, CheckCircle2, FileCode2, Sparkles } from "lucide-react";
-import CodeEditor from "./CodeEditor.jsx";
+import { BookOpen, FileCode2, Sparkles } from "lucide-react";
 import { GeminiTutor } from "./GeminiTutor.jsx";
+import MockQuestionSolution from "./MockQuestionSolution.jsx";
 import PracticeNotes from "./PracticeNotes.jsx";
 
 const TABS = [
@@ -10,56 +10,13 @@ const TABS = [
   { id: "note", label: "노트", icon: FileCode2 },
 ];
 
-function QuestionSolution({ problem, grade, submittedCode, referenceCode }) {
-  return (
-    <>
-      {problem.scenario && <p>{problem.scenario}</p>}
-      <ol>{problem.steps.map((step) => <li key={step}>{step}</li>)}</ol>
-      {grade.details?.map((detail) => (
-        <div key={detail.key} className="mock-answer-review">
-          {detail.correct ? (
-            <CheckCircle2 size={17} aria-label="정답" />
-          ) : (
-            <span className="mock-error">오답</span>
-          )}
-          <strong>{detail.label}</strong>
-          <span>제출 {detail.actual ?? "미입력"}</span>
-          <span>정답 {detail.expected}</span>
-          {detail.formatError && <small className="mock-error">{detail.formatError}</small>}
-        </div>
-      ))}
-      {grade.metric != null && (
-        <p>
-          {grade.metricName} <strong>{grade.metric.toFixed(4)}</strong>
-          {" · 모의 만점 기준 "}{grade.threshold.toFixed(4)} {grade.higher ? "이상" : "이하"}
-        </p>
-      )}
-      {grade.error && <p className="mock-error">{grade.error}</p>}
-      {(submittedCode || referenceCode) && (
-        <div className="mock-review-code">
-          {submittedCode && (
-            <section aria-label="내 코드">
-              <h3>내 코드</h3>
-              <CodeEditor value={submittedCode} readOnly label="내 Python 코드" />
-            </section>
-          )}
-          {referenceCode && (
-            <section aria-label="기준 풀이 코드">
-              <h3>기준 풀이 코드</h3>
-              <CodeEditor value={referenceCode} readOnly />
-            </section>
-          )}
-        </div>
-      )}
-    </>
-  );
-}
-
 export default function MockQuestionReview({
-  problem, round, questionNumber, grade, submittedCode, referenceCode, noteRecords,
+  problem, round, questionNumber, grade, submittedCode, gradingSpec, noteRecords,
+  retry, updateRetry, runner, runId,
 }) {
   const [tab, setTab] = useState("solution");
   const [expanded, setExpanded] = useState(false);
+  const [retrying, setRetrying] = useState(Boolean(retry));
   const tabList = useRef(null);
   const { id } = problem;
   const code = submittedCode || "";
@@ -70,7 +27,7 @@ export default function MockQuestionReview({
     earnedPoints: grade.earned,
     availablePoints: problem.points,
     answers: grade.details,
-    referenceCode,
+    referenceCode: gradingSpec.code,
     submissionError: grade.error,
     ...(grade.metric != null && {
       prediction: {
@@ -114,7 +71,20 @@ export default function MockQuestionReview({
       )}
       <div id={`${id}-panel-solution`} role="tabpanel" aria-labelledby={`${id}-tab-solution`}
         className="mock-review-body" hidden={tab !== "solution"}>
-        {tab === "solution" && <QuestionSolution {...{ problem, grade, submittedCode, referenceCode }} />}
+        {tab === "solution" && (
+          <MockQuestionSolution
+            problem={problem}
+            grade={grade}
+            submittedCode={submittedCode}
+            gradingSpec={gradingSpec}
+            retry={retry}
+            updateRetry={updateRetry}
+            retrying={retrying}
+            onRetryingChange={setRetrying}
+            runner={runner}
+            runId={runId}
+          />
+        )}
       </div>
       <div id={`${id}-panel-ai`} role="tabpanel" aria-label="AI 질문" hidden={tab !== "ai"}
         className={`mock-review-ai${aiExpanded ? " gemini-expanded" : ""}`}>

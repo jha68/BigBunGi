@@ -1,22 +1,35 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, ArrowRight, ChevronDown, ClipboardCheck,
-  Clock3, ExternalLink, FileSpreadsheet, Flag, Loader2, Play, Square, Terminal,
+  Clock3, ExternalLink, FileSpreadsheet, Flag, Loader2, Play, Terminal,
 } from "lucide-react";
 import CodeEditor from "./CodeEditor.jsx";
+import { ExamAnswerFields, ExamConsole, MockRunToolbar, TaskFiles } from "./MockExamControls.jsx";
 import MockQuestionReview from "./MockQuestionReview.jsx";
 import {
-  answerStatus, EXAM_SECTIONS, gradeExam, MOCK_CONTENT, MOCK_STORAGE, remainingTime,
+  answerStatus, EXAM_SECTIONS, gradeExam, MOCK_CONTENT, MOCK_PREDICTION_FILE,
+  MOCK_STARTER, MOCK_STORAGE, remainingTime,
 } from "./mock-exam.js";
 import "./mock-exam.css";
 
-const CSV_NAME = "result.csv";
-const STARTER = "# Python 코드를 작성하세요.\n";
 const dateFormat = new Intl.DateTimeFormat("ko-KR", {
   year: "numeric", month: "long", day: "numeric", timeZone: "UTC",
 });
 const examDate = (date) => dateFormat.format(new Date(date));
 const runPrefix = (attempt) => "mock:" + attempt.id + ":";
+
+function useExamRuns(runner, prefix) {
+  const runnerRef = useRef(runner);
+  runnerRef.current = runner;
+  useEffect(() => {
+    if (!prefix) return;
+    return () => {
+      const current = runnerRef.current;
+      if (current.running?.id.startsWith(prefix)) current.onStop();
+      current.onClearResults(prefix);
+    };
+  }, [prefix]);
+}
 
 function readAttempts() {
   try {
@@ -151,7 +164,7 @@ function ExamReady({ exam, runtime, onStart, onRestart }) {
         })}
       </dl>
       <ul className="mock-ready-rules">
-        <li>수치와 텍스트는 답안란에 입력하세요. 작업형 제2유형은 코드로 <code>{CSV_NAME}</code>를 만든 뒤 답안에 등록하세요.</li>
+        <li>수치와 텍스트는 답안란에 입력하세요. 작업형 제2유형은 코드로 <code>{MOCK_PREDICTION_FILE}</code>를 만든 뒤 답안에 등록하세요.</li>
         <li>답안과 코드는 이 브라우저에 저장됩니다. 화면을 나가거나 새로고침해도 남은 시간은 계속 줄어듭니다.</li>
         <li>작업형 제2유형의 점수 구간은 이 실습 데이터 기준으로 계산합니다.</li>
         {exam.supplementalCount > 0 && (
@@ -185,24 +198,6 @@ function ExamClock({ deadline }) {
   );
 }
 
-function TaskFiles({ files }) {
-  if (!files.length) return null;
-  return (
-    <div className="mock-file-list" aria-label="실습 데이터 파일">
-      {files.map((file) => (
-        <details className="mock-dataset" key={file.name}>
-          <summary><code>data/{file.name}</code><small>{file.rows}행</small></summary>
-          <dl>
-            {file.columns.map(({ name, description }) => (
-              <div key={name}><dt><code>{name}</code></dt><dd>{description}</dd></div>
-            ))}
-          </dl>
-        </details>
-      ))}
-    </div>
-  );
-}
-
 function PredictionAnswer({ item, result, savedFile, onRegister }) {
   const candidate = !result?.error && result?.submission;
   const expectedRows = item.files.find(({ name }) => name === "test.csv").rows;
@@ -218,7 +213,7 @@ function PredictionAnswer({ item, result, savedFile, onRegister }) {
       <div>
         <FileSpreadsheet size={20} aria-hidden="true" />
         <span>
-          <strong>{CSV_NAME}</strong>
+          <strong>{MOCK_PREDICTION_FILE}</strong>
           <small>{savedFile ? "답안 등록됨 · " + savedFile.rows.length + "행" : "파일을 만든 뒤 답안에 등록하세요."}</small>
         </span>
       </div>
@@ -231,49 +226,22 @@ function PredictionAnswer({ item, result, savedFile, onRegister }) {
   );
 }
 
-function ExamConsole({ result }) {
-  const { stdout, stderr, error, display, plots = [] } = result || {};
-  return (
-    <div className="mock-console" aria-live="polite">
-      {stdout && <pre>{stdout}</pre>}
-      {stderr && <pre className="warning-output">{stderr}</pre>}
-      {error && <pre className="error-output">{error}</pre>}
-      {display?.kind === "text" && <pre>{display.text}</pre>}
-      {display?.kind === "table" && (
-        <div className="table-scroll">
-          <table>
-            <thead><tr>{display.columns.map((column, i) => <th key={i}>{column}</th>)}</tr></thead>
-            <tbody>{display.rows.map((row, i) => (
-              <tr key={i}>{row.map((value, j) => <td key={j}>{String(value ?? "NaN")}</td>)}</tr>
-            ))}</tbody>
-          </table>
-        </div>
-      )}
-      {plots.map((plot, index) => <img className="result-plot" key={index} src={"data:image/png;base64," + plot} alt={"분석 그래프 " + (index + 1)} />)}
-      {!stdout && !stderr && !error && !display && !plots.length && (
-        <p>{result ? "코드 실행 완료" : "코드 실행 결과가 여기에 표시됩니다."}</p>
-      )}
-    </div>
-  );
-}
-
 function ExamWorkspace({ exam, attempt, update, onSubmit, runner }) {
   const { questions } = exam;
   const index = attempt.index;
   const item = questions[index];
   const runId = runPrefix(attempt) + item.id;
   const result = runner.results[runId];
-  const code = attempt.code[item.id] ?? STARTER;
+  const code = attempt.code[item.id] ?? MOCK_STARTER;
   const complete = questions.filter((question) => answerStatus(question, attempt) === "complete").length;
   const marked = attempt.flags[item.id] === true;
-  const moreThanOne = item.fields.length > 1;
   function move(index) {
     update((previous) => ({ ...previous, index }));
     window.scrollTo({ top: 0 });
   }
   function run() {
     if (Date.now() >= attempt.deadline || runner.running || !runner.runtime.ready) return;
-    runner.onRun({ id: runId, code, files: item.files, dataId: item.id, submissionName: CSV_NAME });
+    runner.onRun({ id: runId, code, files: item.files, dataId: item.id, submissionName: MOCK_PREDICTION_FILE });
   }
 
   return (
@@ -333,23 +301,11 @@ function ExamWorkspace({ exam, attempt, update, onSubmit, runner }) {
                 ...previous, files: { ...previous.files, [item.id]: file },
               }))} />
           ) : (
-            <div className="mock-answer-fields">
-              {item.fields.map((field, position) => (
-                <label key={field.key}>
-                  <span>{moreThanOne ? (position + 1) + ". " : ""}{field.label}<small>{field.format} · {field.points}점</small></span>
-                  <input type="text" inputMode={field.decimals == null ? "text" : "decimal"}
-                    aria-label={field.label} autoComplete="off" maxLength={300}
-                    value={attempt.answers[item.id]?.[field.key] ?? ""}
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      update((previous) => ({
-                        ...previous,
-                        answers: { ...previous.answers, [item.id]: { ...previous.answers[item.id], [field.key]: value } },
-                      }));
-                    }} />
-                </label>
-              ))}
-            </div>
+            <ExamAnswerFields fields={item.fields} values={attempt.answers[item.id] || {}}
+              onChange={(key, value) => update((previous) => ({
+                ...previous,
+                answers: { ...previous.answers, [item.id]: { ...previous.answers[item.id], [key]: value } },
+              }))} />
           )}
         </article>
         {item.type !== 0 && (
@@ -357,18 +313,7 @@ function ExamWorkspace({ exam, attempt, update, onSubmit, runner }) {
             <header><strong>solution.py</strong><span>Python</span></header>
             <CodeEditor key={runId} value={code} onRun={run}
               onChange={(value) => update((previous) => ({ ...previous, code: { ...previous.code, [item.id]: value } }))} />
-            <div className="mock-run-bar">
-              <span role="status">{runner.running?.stage || runner.runtime.message}</span>
-              {runner.runtime.error ? (
-                <button className="mock-secondary" onClick={runner.onRestartRuntime}>다시 시작</button>
-              ) : runner.running ? (
-                <button className="mock-secondary" onClick={runner.onStop}><Square size={13} /> 중지</button>
-              ) : (
-                <button className="mock-primary" disabled={!runner.runtime.ready} onClick={run}>
-                  <Play size={14} /> 코드 실행
-                </button>
-              )}
-            </div>
+            <MockRunToolbar runner={runner} onRun={run} />
             <div className="mock-console-heading"><Terminal size={15} /> 실행 결과</div>
             <ExamConsole result={result} />
           </div>
@@ -390,8 +335,10 @@ function ExamWorkspace({ exam, attempt, update, onSubmit, runner }) {
   );
 }
 
-function ExamResults({ exam, attempt, load, noteRecords }) {
+function ExamResults({ exam, attempt, load, noteRecords, runner, updateRetry }) {
   const [openId, setOpenId] = useState(null);
+  const retryPrefix = "mock-review:" + attempt.id + ":";
+  useExamRuns(runner, retryPrefix);
   const info = useExamFile(load, "keys/" + exam.round + ".json");
   const keys = info.response?.data;
   const grade = useMemo(
@@ -445,8 +392,12 @@ function ExamResults({ exam, attempt, load, noteRecords }) {
                       questionNumber={index + 1}
                       grade={evaluated}
                       submittedCode={attempt.code[item.id]}
-                      referenceCode={keys[item.id].code}
+                      gradingSpec={keys[item.id]}
                       noteRecords={noteRecords}
+                      retry={attempt.retries?.[item.id]}
+                      updateRetry={(change) => updateRetry(item.id, change)}
+                      runner={runner}
+                      runId={retryPrefix + item.id}
                     />
                   )}
                 </details>
@@ -528,17 +479,7 @@ export default function MockExam({ load, noteRecords, ...runner }) {
     };
   }, [activeId, deadline, finish]);
 
-  const runnerRef = useRef(runner);
-  runnerRef.current = runner;
-  useEffect(() => {
-    if (!activeId) return;
-    const prefix = "mock:" + activeId + ":";
-    return () => {
-      const current = runnerRef.current;
-      if (current.running?.id.startsWith(prefix)) current.onStop();
-      current.onClearResults(prefix);
-    };
-  }, [activeId]);
+  useExamRuns(runner, saved.active && runPrefix(saved.active));
 
   const goTo = (mode, roundNumber) => {
     setView({ mode, round: roundNumber });
@@ -562,6 +503,23 @@ export default function MockExam({ load, noteRecords, ...runner }) {
       return { ...previous, active: change(attempt) };
     });
   };
+  function updateRetry(submitted, problemId, change) {
+    changeSaved((previous) => {
+      const attempt = previous.completed[submitted.round];
+      if (attempt?.id !== submitted.id) return previous;
+      const retries = attempt.retries || {};
+      const current = retries[problemId] || {};
+      const next = change(current);
+      if (next === current) return previous;
+      return {
+        ...previous,
+        completed: {
+          ...previous.completed,
+          [submitted.round]: { ...attempt, retries: { ...retries, [problemId]: next } },
+        },
+      };
+    });
+  }
   function submit(complete, count) {
     const pending = count - complete;
     if (window.confirm((pending ? "답안을 모두 작성하지 않은 문항 " + pending + "개가 있습니다. " : "") + "시험을 종료하고 최종 제출할까요?")) {
@@ -609,6 +567,8 @@ export default function MockExam({ load, noteRecords, ...runner }) {
                   attempt={submitted}
                   load={load}
                   noteRecords={noteRecords}
+                  runner={runner}
+                  updateRetry={(problemId, change) => updateRetry(submitted, problemId, change)}
                 />
               );
             }

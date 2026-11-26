@@ -585,8 +585,21 @@
 .mock-review-code section {
   min-width: 0;
 }
-.mock-review-code h3 {
-  margin: 0 0 6px;
+.mock-review-code-heading, .mock-retry-submit-actions, .mock-retry-grade-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.mock-review-code-heading, .mock-retry-grade-heading {
+  justify-content: space-between;
+}
+.mock-review-code-heading {
+  min-height: 34px;
+  margin-bottom: 6px;
+}
+.mock-review-code-heading h3, .mock-retry-grade-heading h3 {
+  margin: 0;
   color: #354d67;
   font-size: 13px;
 }
@@ -595,6 +608,57 @@
 }
 .mock-review-code .cm-gutters {
   padding-block: 0;
+}
+.mock-retry-toggle {
+  min-height: 32px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+.mock-retry-no-code {
+  padding: 11px 12px;
+  border-radius: 6px;
+  background: #f2f6f9;
+  color: var(--mock-muted);
+  font-size: 13px;
+}
+.mock-retry-editor {
+  overflow: hidden;
+  border: 1px solid var(--mock-border);
+  border-radius: 6px;
+}
+.mock-retry-editor .code-editor {
+  height: clamp(225px, 30vh, 340px);
+}
+.mock-retry-editor .mock-retry-stale {
+  padding: 8px 12px 0;
+  color: #79511f;
+  font-size: 12px;
+}
+.mock-retry-short, .mock-retry-submission, .mock-retry-grade {
+  margin-top: 12px;
+}
+.mock-retry-submission, .mock-retry-grade {
+  padding: 12px;
+  border: 1px solid var(--mock-border);
+  border-radius: 7px;
+  background: #f6f9fb;
+}
+.mock-retry-submission .mock-answer-fields {
+  margin: 0;
+  padding: 0;
+  border-top: 0;
+}
+.mock-retry-submit-actions {
+  justify-content: flex-end;
+  margin-top: 10px;
+  color: var(--mock-muted);
+  font-size: 12px;
+}
+.mock-retry-grade-heading {
+  padding-bottom: 8px;
+}
+.mock-retry-grade[data-passed="true"] .mock-retry-grade-heading strong {
+  color: var(--mock-green);
 }
 .mock-review-ai .gemini-panel {
   height: auto;

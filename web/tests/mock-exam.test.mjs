@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { gradePrediction } from "../src/grading.js";
-import { answerStatus, gradeExam, remainingTime } from "../src/mock-exam.js";
+import { answerStatus, gradeExam, gradeMockQuestion, remainingTime, retryAnswersFromOutput } from "../src/mock-exam.js";
 
 const trueClasses = [1, 2, 3, 4];
 const makeFile = (values) => ({ columns: ["pred"], rows: values.map((pred) => ({ pred })) });
@@ -58,4 +58,30 @@ test("the countdown derives from an absolute deadline and stops at zero", () => 
   assert.equal(remainingTime(10_800_000, 0), "03:00:00");
   assert.equal(remainingTime(10_800_000, 1_001), "02:59:59");
   assert.equal(remainingTime(10_800_000, 10_800_100), "00:00:00");
+});
+
+test("a review retry grades the revised answer without modifying the completed attempt", () => {
+  const question = {
+    id: "r12-01", type: 1, points: 10,
+    fields: [{ key: "answer_1", label: "집계 행 수", decimals: 0, points: 10 }],
+  };
+  const spec = { expected: { answer_1: 12 } };
+  const attempt = { answers: { [question.id]: { answer_1: "3" } }, files: {} };
+  const result = { code: "print(12)", stdout: "12\n" };
+  const answers = retryAnswersFromOutput(question.fields, result, result.code);
+  assert.equal(gradeMockQuestion(question, spec, { answers }).earned, 10);
+  assert.equal(gradeExam([question], { [question.id]: spec }, attempt).total, 0);
+  assert.equal(attempt.answers[question.id].answer_1, "3");
+});
+
+test("retry answers can use current structured output or one unambiguous console value", () => {
+  const fields = [{ key: "a", decimals: 2 }, { key: "b", decimals: null }];
+  const result = { code: "trial", stdout: "some diagnostics\n3.21\n", answers: { a: 3.21, b: "서울" } };
+  assert.deepEqual(retryAnswersFromOutput(fields, result, "trial"), { a: "3.21", b: "서울" });
+  assert.deepEqual(retryAnswersFromOutput(fields, result, "edited"), {});
+  assert.deepEqual(retryAnswersFromOutput(fields, { ...result, error: "Runtime error" }, "trial"), {});
+  assert.deepEqual(retryAnswersFromOutput(fields, { code: "trial", stdout: "3.21\n" }, "trial"), {});
+  assert.deepEqual(retryAnswersFromOutput(fields.slice(0, 1), { code: "trial", stdout: "debug\n3.21\n" }, "trial"), {});
+  assert.deepEqual(retryAnswersFromOutput(fields.slice(0, 1), { code: "trial", stdout: "0\n" }, "trial"), { a: "0" });
+  assert.deepEqual(retryAnswersFromOutput(fields.slice(1), { code: "trial", stdout: "서울\n" }, "trial"), { b: "서울" });
 });

@@ -1,12 +1,14 @@
 // This is a transparent learning app, not a secure examination platform.
 // Reference answers and held-out labels ship as static assets on GitHub Pages.
 
+export const DECIMAL_ANSWER = /^[+-]?(\d+(?:\.\d*)?|\.\d+)(?:e([+-]?\d+))?$/i;
+
 export function gradeNumeric(spec, answers) {
   const details = spec.fields.map((field) => {
     const raw = answers?.[field.key];
     const text = typeof raw === "string" || typeof raw === "number"
       ? String(raw).trim() : "";
-    const decimal = text.match(/^[+-]?(\d+(?:\.\d*)?|\.\d+)(?:e([+-]?\d+))?$/i);
+    const decimal = text.match(DECIMAL_ANSWER);
     const value = decimal ? Number(text) : NaN;
     const expected = spec.expected[field.key];
     // Count effective decimal places, allowing trailing zeros and scientific
