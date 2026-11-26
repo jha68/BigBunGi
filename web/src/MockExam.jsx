@@ -7,6 +7,7 @@ import CodeEditor from "./CodeEditor.jsx";
 import { ExamAnswerFields, ExamConsole, MockRunToolbar, TaskFiles } from "./MockExamControls.jsx";
 import MockQuestionReview from "./MockQuestionReview.jsx";
 import RetryMark from "./RetryMark.jsx";
+import { preserveRetryScore } from "./mock-records.js";
 import {
   answerStatus, EXAM_SECTIONS, gradeExam, MOCK_CONTENT, MOCK_PREDICTION_FILE,
   MOCK_STARTER, remainingTime,
@@ -365,8 +366,9 @@ function ExamResults({
                 · 60점 이상 모의시험 통과
               </p>
             </div>
-            <div className={grade.total >= 60 ? "mock-score passed" : "mock-score"}>
+            <div className={grade.total >= 60 ? "mock-score passed" : "mock-score"} aria-live="polite">
               <strong>{grade.total}</strong><span> / 100점</span>
+              {grade.total > grade.originalTotal && <small>최초 제출 {grade.originalTotal}점</small>}
             </div>
           </header>
           <SourceLinks exam={exam} />
@@ -397,7 +399,7 @@ function ExamResults({
                         <small>{EXAM_SECTIONS[item.type]}{!item.recalled && " · 보완 문항"}</small>
                       </span>
                       <span>
-                        {evaluated.earned} / {item.points}점 <ChevronDown size={15} aria-hidden="true" />
+                        {evaluated.adjustedEarned} / {item.points}점 <ChevronDown size={15} aria-hidden="true" />
                       </span>
                     </button>
                     <RetryMark
@@ -474,11 +476,12 @@ export default function MockExam({ load, noteRecords, records, syncEnabled, view
       const current = retries[problemId] || {};
       const next = change(current);
       if (next === current) return previous;
+      const updatedRetries = { ...retries, [problemId]: preserveRetryScore(next, current) };
       return {
         ...previous,
         completed: {
           ...previous.completed,
-          [submitted.round]: { ...attempt, updatedAt: Date.now(), retries: { ...retries, [problemId]: next } },
+          [submitted.round]: { ...attempt, updatedAt: Date.now(), retries: updatedRetries },
         },
       };
     });

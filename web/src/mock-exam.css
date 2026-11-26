@@ -546,6 +546,10 @@
 .mock-score strong {
   font-size: 31px;
 }
+.mock-score small {
+  display: block;
+  font-size: 12px;
+}
 .mock-review-tools {
   display: flex;
   justify-content: flex-end;
@@ -598,6 +602,11 @@
 .mock-review-body {
   padding: 15px;
   min-width: 0;
+}
+.mock-review-body .mock-original-score {
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: var(--mock-muted);
 }
 .mock-answer-review {
   display: flex;

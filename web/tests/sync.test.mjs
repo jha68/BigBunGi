@@ -80,3 +80,25 @@ test("exam migration preserves rounds, newer submissions and removed bookmarks",
   const updated = { ...remote.completed[11], updatedAt: 9, retries: {} };
   assert.equal(mergeMockRecords(remote, { completed: { 11: updated } }).completed[11], updated);
 });
+
+test("synchronizing the same attempt keeps the newest retry drafts and the highest scores", () => {
+  const remote = {
+    completed: { 12: {
+      id: "same-attempt", updatedAt: 10,
+      retries: { "r12-01": { code: "older", grade: { earned: 10 } } },
+    } },
+  };
+  const local = {
+    completed: { 12: {
+      id: "same-attempt", updatedAt: 11,
+      retries: {
+        "r12-01": { code: "newer", grade: { earned: 0 } },
+        "r12-02": { bestEarned: 10 },
+      },
+    } },
+  };
+  assert.deepEqual(mergeMockRecords(remote, local).completed[12].retries, {
+    "r12-01": { code: "newer", grade: { earned: 0 }, bestEarned: 10 },
+    "r12-02": { bestEarned: 10 },
+  });
+});

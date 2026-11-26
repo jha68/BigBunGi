@@ -1,4 +1,5 @@
 import { DECIMAL_ANSWER, gradeNumeric, gradePrediction } from "./grading.js";
+import { retryEarned } from "./mock-records.js";
 
 export const MOCK_CONTENT = "content/mock-exams";
 export const MOCK_PREDICTION_FILE = "result.csv";
@@ -55,14 +56,18 @@ export function gradeMockQuestion(question, spec, { answers = {}, submission }) 
 }
 
 export function gradeExam(questions, answerKey, attempt) {
-  const questionsGraded = questions.map((question) =>
-    gradeMockQuestion(question, answerKey[question.id], {
-      answers: attempt.answers[question.id],
-      submission: attempt.files[question.id],
-    }),
-  );
+  const questionsGraded = questions.map((question) => {
+    const { id, points } = question;
+    const original = gradeMockQuestion(question, answerKey[id], {
+      answers: attempt.answers[id],
+      submission: attempt.files[id],
+    });
+    const adjustedEarned = Math.max(original.earned, Math.min(points, retryEarned(attempt.retries?.[id])));
+    return { ...original, adjustedEarned };
+  });
   return {
-    total: questionsGraded.reduce((points, question) => points + question.earned, 0),
+    total: questionsGraded.reduce((points, question) => points + question.adjustedEarned, 0),
+    originalTotal: questionsGraded.reduce((points, question) => points + question.earned, 0),
     questions: questionsGraded,
   };
 }

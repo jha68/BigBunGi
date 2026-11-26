@@ -21,14 +21,23 @@ export function readMockExam() {
   }
 }
 
+export function retryEarned(retry) {
+  return Math.max(0, ...[retry?.bestEarned, retry?.grade?.earned].filter(Number.isFinite));
+}
+
+export function preserveRetryScore(retry, previous) {
+  const bestEarned = Math.max(retryEarned(retry), retryEarned(previous));
+  return bestEarned > 0 && bestEarned !== retry?.bestEarned ? { ...retry, bestEarned } : retry;
+}
+
 export function mergeMockRecords(server, browser) {
   const remote = mockRecords(server);
   const local = mockRecords(browser);
   const completed = { ...remote.completed };
   for (const [round, attempt] of Object.entries(local.completed)) {
     const other = completed[round];
-    if (!other || isNewerAttempt(attempt, other))
-      completed[round] = attempt;
+    const newer = !other || isNewerAttempt(attempt, other);
+    completed[round] = mergeRetryScores(newer ? attempt : other, newer ? other : attempt);
   }
   const retryMarks = { ...remote.retryMarks };
   const retryMarkTimes = { ...remote.retryMarkTimes };
@@ -43,6 +52,17 @@ export function mergeMockRecords(server, browser) {
     }
   }
   return { completed, retryMarks, retryMarkTimes };
+}
+
+function mergeRetryScores(attempt, other) {
+  if (!other || attempt?.id !== other.id || attempt === other) return attempt;
+  let retries = attempt.retries;
+  for (const [id, previous] of Object.entries(other.retries || {})) {
+    const current = retries?.[id];
+    if (retryEarned(previous) > retryEarned(current))
+      retries = { ...retries, [id]: preserveRetryScore(current, previous) };
+  }
+  return retries === attempt.retries ? attempt : { ...attempt, retries };
 }
 
 function isNewerAttempt(attempt, other) {

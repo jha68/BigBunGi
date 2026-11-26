@@ -1,13 +1,15 @@
-"""Verify mock-exam retry bookmarks in a browser with generated mock content."""
+"""Verify mock-exam retry marks and scores in a browser with generated content."""
 import asyncio
 import json
 import os
 import re
+from pathlib import Path
 
 from playwright.async_api import async_playwright, expect
 
 
 STORAGE = "bigbungi.mock-exam.v1"
+KEYS = Path(__file__).resolve().parents[1] / "web/public/content/mock-exams/keys"
 
 
 async def main():
@@ -57,8 +59,28 @@ async def main():
         await expect(marked_only).to_have_attribute("aria-pressed", "true")
         await expect(review.get_by_role("button", name=re.compile("다시 풀기 표시$"))).to_have_count(2)
         assert await page.evaluate("document.documentElement.scrollWidth <= innerWidth")
-        await review.get_by_role("button", name=re.compile(r"^1\. ")).click()
-        await expect(review.get_by_role("button", name="다시 풀기", exact=True)).to_be_visible()
+        first_question = review.get_by_role("button", name=re.compile(r"^1\. "))
+        await first_question.click()
+        await review.get_by_role("button", name="다시 풀기", exact=True).click()
+        correct_answer = json.loads((KEYS / "12.json").read_text())["r12-01"]["expected"]["answer_1"]
+        editor = review.get_by_role("textbox", name="내 Python 코드 수정", exact=True)
+        await editor.press("Control+a")
+        await page.keyboard.insert_text(f"print({correct_answer})")
+        await review.get_by_role("button", name="코드 실행", exact=True).click(timeout=120000)
+        retry_submit = review.get_by_role("button", name="다시 제출 · 채점", exact=True)
+        await retry_submit.click(timeout=120000)
+        score = page.locator(".mock-score strong")
+        await expect(score).to_have_text("10")
+        await expect(first_question).to_contain_text("10 / 10점")
+        await expect(page.locator(".mock-score")).to_contain_text("최초 제출 0점")
+        await review.get_by_role("form", name="재제출 답안").get_by_role("textbox").fill(str(correct_answer + 1))
+        await expect(score).to_have_text("10")
+        await retry_submit.click()
+        await expect(review.get_by_role("status", name="재채점 결과")).to_contain_text("오답")
+        await expect(score).to_have_text("10")
+        await page.reload()
+        await round_bookmark.click()
+        await expect(score).to_have_text("10")
         await second_mark.click()
         await expect(second_mark).to_have_count(0)
         await expect(marked_only).to_be_focused()
@@ -95,7 +117,7 @@ async def main():
             return !saved.active && saved.completed['10']?.id === 'expired-off-screen';
         }""", arg=STORAGE)
         await browser.close()
-        print("PASS: mock question marks, per-round counts, mobile filtered review, reload, resubmission, and removal.")
+        print("PASS: retry scores update the round total and survive a lower result and reload; mock question marks still work.")
 
 
 if __name__ == "__main__":

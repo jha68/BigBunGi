@@ -107,6 +107,9 @@ export default function MockQuestionSolution({
     <>
       {problem.scenario && <p>{problem.scenario}</p>}
       <ol>{problem.steps.map((step) => <li key={step}>{step}</li>)}</ol>
+      {grade.adjustedEarned > grade.earned && (
+        <p className="mock-original-score">최초 제출 {grade.earned}점 · 재채점 반영 {grade.adjustedEarned}점</p>
+      )}
       <QuestionGrade grade={grade} />
       {retrying && <TaskFiles files={problem.files} />}
       {coding ? (

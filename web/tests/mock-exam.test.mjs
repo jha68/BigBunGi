@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { gradePrediction } from "../src/grading.js";
 import { answerStatus, gradeExam, gradeMockQuestion, remainingTime, retryAnswersFromOutput } from "../src/mock-exam.js";
+import { preserveRetryScore } from "../src/mock-records.js";
 
 const trueClasses = [1, 2, 3, 4];
 const makeFile = (values) => ({ columns: ["pred"], rows: values.map((pred) => ({ pred })) });
@@ -60,17 +61,29 @@ test("the countdown derives from an absolute deadline and stops at zero", () => 
   assert.equal(remainingTime(10_800_000, 10_800_100), "00:00:00");
 });
 
-test("a review retry grades the revised answer without modifying the completed attempt", () => {
+test("an improved retry counts toward the total and survives a later edit or lower result", () => {
   const question = {
     id: "r12-01", type: 1, points: 10,
     fields: [{ key: "answer_1", label: "집계 행 수", decimals: 0, points: 10 }],
   };
   const spec = { expected: { answer_1: 12 } };
   const attempt = { answers: { [question.id]: { answer_1: "3" } }, files: {} };
+  const grade = () => gradeExam([question], { [question.id]: spec }, attempt);
   const result = { code: "print(12)", stdout: "12\n" };
   const answers = retryAnswersFromOutput(question.fields, result, result.code);
-  assert.equal(gradeMockQuestion(question, spec, { answers }).earned, 10);
-  assert.equal(gradeExam([question], { [question.id]: spec }, attempt).total, 0);
+  const corrected = { grade: gradeMockQuestion(question, spec, { answers }) };
+  assert.equal(grade().total, 0);
+  attempt.retries = { [question.id]: corrected };
+  assert.equal(grade().total, 10);
+  assert.equal(grade().originalTotal, 0);
+  assert.equal(grade().questions[0].adjustedEarned, 10);
+  const edited = preserveRetryScore({ code: "print(3)" }, corrected);
+  attempt.retries[question.id] = edited;
+  assert.equal(grade().total, 10);
+  const worse = { ...edited, grade: gradeMockQuestion(question, spec, { answers: { answer_1: "3" } }) };
+  attempt.retries[question.id] = preserveRetryScore(worse, edited);
+  assert.equal(grade().total, 10);
+  assert.equal(grade().questions[0].details[0].actual, 3);
   assert.equal(attempt.answers[question.id].answer_1, "3");
 });
 
