@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowLeft, ArrowRight, ChevronDown, ClipboardCheck,
+  ArrowLeft, ArrowRight, Bookmark, BookmarkCheck, ChevronDown, ClipboardCheck,
   Clock3, ExternalLink, FileSpreadsheet, Flag, Loader2, Play, Terminal,
 } from "lucide-react";
 import CodeEditor from "./CodeEditor.jsx";
 import { ExamAnswerFields, ExamConsole, MockRunToolbar, TaskFiles } from "./MockExamControls.jsx";
 import MockQuestionReview from "./MockQuestionReview.jsx";
+import RetryMark from "./RetryMark.jsx";
 import {
   answerStatus, EXAM_SECTIONS, gradeExam, MOCK_CONTENT, MOCK_PREDICTION_FILE,
   MOCK_STARTER, MOCK_STORAGE, remainingTime,
@@ -114,32 +115,40 @@ function ExamList({ exams, saved, onSelect, onResume, onResults }) {
         </section>
       )}
       <div className="mock-rounds" aria-label="회차 목록">
-        {exams.map((exam) => (
-          <article className="mock-round" key={exam.round}>
-            <header>
-              <h2>제{exam.round}회</h2>
-              <time dateTime={exam.date}>{examDate(exam.date)}</time>
-            </header>
-            <p>{exam.summary}</p>
-            <div className="mock-round-format">
-              {exam.questionCount}문항 · {exam.round < 6 ? "단답형 및 작업형 1·2유형" : "작업형 1·2·3유형"}
-            </div>
-            <SourceLinks exam={exam} />
-            <div className="mock-round-actions">
-              {saved.completed[exam.round] && (
-                <button className="mock-secondary" onClick={() => onResults(exam.round)}>최근 결과</button>
+        {exams.map((exam) => {
+          const markedCount = saved.retryMarks?.[exam.round]?.length ?? 0;
+          return (
+            <article className="mock-round" key={exam.round}>
+              <header>
+                <h2>제{exam.round}회</h2>
+                <time dateTime={exam.date}>{examDate(exam.date)}</time>
+              </header>
+              {markedCount > 0 && (
+                <button className="mock-retry-badge" onClick={() => onResults(exam.round, true)}>
+                  <BookmarkCheck size={15} aria-hidden="true" /> 다시 풀기 {markedCount}문항
+                </button>
               )}
-              <button
-                className="mock-primary"
-                disabled={Boolean(saved.active && saved.active.round !== exam.round)}
-                onClick={() => saved.active ? onResume() : onSelect(exam.round)}
-              >
-                {saved.active?.round === exam.round ? "이어서 응시" : "응시 준비"}
-                <ArrowRight size={15} />
-              </button>
-            </div>
-          </article>
-        ))}
+              <p>{exam.summary}</p>
+              <div className="mock-round-format">
+                {exam.questionCount}문항 · {exam.round < 6 ? "단답형 및 작업형 1·2유형" : "작업형 1·2·3유형"}
+              </div>
+              <SourceLinks exam={exam} />
+              <div className="mock-round-actions">
+                {saved.completed[exam.round] && (
+                  <button className="mock-secondary" onClick={() => onResults(exam.round)}>최근 결과</button>
+                )}
+                <button
+                  className="mock-primary"
+                  disabled={Boolean(saved.active && saved.active.round !== exam.round)}
+                  onClick={() => saved.active ? onResume() : onSelect(exam.round)}
+                >
+                  {saved.active?.round === exam.round ? "이어서 응시" : "응시 준비"}
+                  <ArrowRight size={15} />
+                </button>
+              </div>
+            </article>
+          );
+        })}
       </div>
     </>
   );
@@ -335,8 +344,13 @@ function ExamWorkspace({ exam, attempt, update, onSubmit, runner }) {
   );
 }
 
-function ExamResults({ exam, attempt, load, noteRecords, runner, updateRetry }) {
+function ExamResults({
+  exam, attempt, load, noteRecords, runner, updateRetry,
+  markedIds, showMarked, onToggleRetryMark,
+}) {
   const [openId, setOpenId] = useState(null);
+  const [markedOnly, setMarkedOnly] = useState(showMarked);
+  const markFilter = useRef(null);
   const retryPrefix = "mock-review:" + attempt.id + ":";
   useExamRuns(runner, retryPrefix);
   const info = useExamFile(load, "keys/" + exam.round + ".json");
@@ -365,42 +379,63 @@ function ExamResults({ exam, attempt, load, noteRecords, runner, updateRetry }) 
             </div>
           </header>
           <SourceLinks exam={exam} />
-          <div className="mock-review">
+          <div className="mock-review-tools">
+            <button ref={markFilter} className="mock-secondary mock-review-filter"
+              aria-pressed={markedOnly} aria-controls="mock-review-questions"
+              onClick={() => setMarkedOnly((enabled) => !enabled)}>
+              <Bookmark size={15} aria-hidden="true" /> 다시 풀 문항만 보기
+            </button>
+          </div>
+          <div className="mock-review" id="mock-review-questions" aria-label="채점 문항" role="region">
+            {markedOnly && !exam.questions.some((item) => markedIds.includes(item.id)) && (
+              <p className="mock-status">다시 풀기 표시를 한 문항이 없습니다.</p>
+            )}
             {exam.questions.map((item, index) => {
+              const marked = markedIds.includes(item.id);
+              if (markedOnly && !marked) return null;
               const evaluated = grade.questions[index];
               const open = openId === item.id;
+              const reviewId = `${item.id}-review`;
               return (
-                <details className="mock-panel" key={item.id} open={open}>
-                  <summary
-                    onClick={(event) => {
-                      event.preventDefault();
-                      setOpenId(open ? null : item.id);
-                    }}
-                  >
-                    <span>
-                      <strong>{index + 1}. {item.title}</strong>
-                      <small>{EXAM_SECTIONS[item.type]}{!item.recalled && " · 보완 문항"}</small>
-                    </span>
-                    <span>
-                      {evaluated.earned} / {item.points}점 <ChevronDown size={15} aria-hidden="true" />
-                    </span>
-                  </summary>
-                  {open && (
-                    <MockQuestionReview
-                      problem={item}
-                      round={exam.round}
-                      questionNumber={index + 1}
-                      grade={evaluated}
-                      submittedCode={attempt.code[item.id]}
-                      gradingSpec={keys[item.id]}
-                      noteRecords={noteRecords}
-                      retry={attempt.retries?.[item.id]}
-                      updateRetry={(change) => updateRetry(item.id, change)}
-                      runner={runner}
-                      runId={retryPrefix + item.id}
+                <div className="mock-panel" key={item.id}>
+                  <div className="mock-review-heading">
+                    <button type="button" className="mock-review-expand" aria-expanded={open} aria-controls={reviewId}
+                      onClick={() => setOpenId(open ? null : item.id)}>
+                      <span>
+                        <strong>{index + 1}. {item.title}</strong>
+                        <small>{EXAM_SECTIONS[item.type]}{!item.recalled && " · 보완 문항"}</small>
+                      </span>
+                      <span>
+                        {evaluated.earned} / {item.points}점 <ChevronDown size={15} aria-hidden="true" />
+                      </span>
+                    </button>
+                    <RetryMark
+                      marked={marked}
+                      problemTitle={`${index + 1}번 ${item.title}`}
+                      onToggle={() => {
+                        if (markedOnly) markFilter.current?.focus();
+                        onToggleRetryMark(item.id);
+                      }}
                     />
-                  )}
-                </details>
+                  </div>
+                  <div id={reviewId} hidden={!open}>
+                    {open && (
+                      <MockQuestionReview
+                        problem={item}
+                        round={exam.round}
+                        questionNumber={index + 1}
+                        grade={evaluated}
+                        submittedCode={attempt.code[item.id]}
+                        gradingSpec={keys[item.id]}
+                        noteRecords={noteRecords}
+                        retry={attempt.retries?.[item.id]}
+                        updateRetry={(change) => updateRetry(item.id, change)}
+                        runner={runner}
+                        runId={retryPrefix + item.id}
+                      />
+                    )}
+                  </div>
+                </div>
               );
             })}
           </div>
@@ -456,6 +491,7 @@ export default function MockExam({ load, noteRecords, view: selectedView, onNavi
       const attempt = previous.active;
       if (!attempt || attempt.id !== id) return previous;
       return {
+        ...previous,
         active: null,
         completed: {
           ...previous.completed,
@@ -517,6 +553,16 @@ export default function MockExam({ load, noteRecords, view: selectedView, onNavi
       };
     });
   }
+  function toggleRetryMark(round, problemId) {
+    changeSaved((previous) => {
+      const retryMarks = previous.retryMarks || {};
+      const markedIds = retryMarks[round] || [];
+      const next = markedIds.includes(problemId)
+        ? markedIds.filter((id) => id !== problemId)
+        : [...markedIds, problemId];
+      return { ...previous, retryMarks: { ...retryMarks, [round]: next } };
+    });
+  }
   function submit(complete, count) {
     const pending = count - complete;
     if (window.confirm((pending ? "답안을 모두 작성하지 않은 문항 " + pending + "개가 있습니다. " : "") + "시험을 종료하고 최종 제출할까요?")) {
@@ -541,7 +587,7 @@ export default function MockExam({ load, noteRecords, view: selectedView, onNavi
             <ExamList exams={exams} saved={saved}
               onSelect={(round) => goTo("prepare", round)}
               onResume={() => goTo("attempt", saved.active.round)}
-              onResults={(round) => goTo("result", round)} />
+              onResults={(round, markedOnly) => goTo(markedOnly ? "marked" : "result", round)} />
           )}
         </LoadState>
       ) : (
@@ -566,6 +612,9 @@ export default function MockExam({ load, noteRecords, view: selectedView, onNavi
                   noteRecords={noteRecords}
                   runner={runner}
                   updateRetry={(problemId, change) => updateRetry(submitted, problemId, change)}
+                  markedIds={saved.retryMarks?.[exam.round] ?? []}
+                  showMarked={view.mode === "marked"}
+                  onToggleRetryMark={(problemId) => toggleRetryMark(exam.round, problemId)}
                 />
               );
             }

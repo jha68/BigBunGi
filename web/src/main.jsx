@@ -43,6 +43,7 @@ import { GeminiProvider, GeminiTutor } from "./GeminiTutor.jsx";
 import PracticeNotes from "./PracticeNotes.jsx";
 import HomeScreen from "./HomeScreen.jsx";
 import MockExam from "./MockExam.jsx";
+import RetryMark from "./RetryMark.jsx";
 import { gradeNumeric, gradePrediction } from "./grading.js";
 import SyncGate, { SyncStatus } from "./SyncGate.jsx";
 import "./styles.css";
@@ -156,22 +157,6 @@ function RetryProblemDialog({ problem, onContinue, onReset }) {
         </button>
       </div>
     </dialog>
-  );
-}
-
-function RetryMark({ marked, onToggle, problemTitle }) {
-  const label = "다시 풀기 표시";
-  return (
-    <button
-      className={`retry-mark ${problemTitle ? "retry-mark-compact" : ""}`}
-      aria-label={problemTitle ? `${problemTitle} ${label}` : label}
-      aria-pressed={marked}
-      title={marked ? "다시 풀기 표시 해제" : label}
-      onClick={onToggle}
-    >
-      <Bookmark size={15} aria-hidden="true" />
-      {!problemTitle && label}
-    </button>
   );
 }
 
@@ -846,6 +831,7 @@ function App({ initialState = initial, onStateChange, syncControls }) {
                   </button>
                   {progress[p.id]?.passed && (
                     <RetryMark
+                      compact
                       problemTitle={p.title}
                       marked={progress[p.id].retryMarked === true}
                       onToggle={() => {

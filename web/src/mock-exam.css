@@ -81,6 +81,26 @@
   color: var(--mock-muted);
   font-size: 12px;
 }
+.mock-retry-badge {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 650;
+}
+.mock-retry-badge, .mock-review-filter[aria-pressed="true"] {
+  background: #fff5e3;
+  border-color: #e8c985;
+  color: #825413;
+}
+.mock-retry-badge:hover:not(:disabled), .mock-review-filter[aria-pressed="true"]:hover:not(:disabled) {
+  background: #ffedcd;
+}
 .mock-round-actions, .mock-ready-actions, .mock-pagination {
   display: flex;
   align-items: center;
@@ -526,35 +546,50 @@
 .mock-score strong {
   font-size: 31px;
 }
+.mock-review-tools {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
 .mock-review {
   display: grid;
   gap: 7px;
   margin-top: 9px;
 }
-.mock-review > details > summary {
-  cursor: pointer;
+.mock-review-heading {
   display: flex;
+  align-items: center;
+}
+.mock-review-expand {
+  display: flex;
+  align-self: stretch;
   align-items: center;
   justify-content: space-between;
   gap: 9px;
+  flex: 1;
+  min-width: 0;
   min-height: 51px;
   padding: 9px 12px;
+  text-align: left;
+  overflow-wrap: anywhere;
 }
-.mock-review > details > summary::-webkit-details-marker {
-  display: none;
-}
-.mock-review > details > summary > span:last-child {
+.mock-review-expand > span:last-child {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   white-space: nowrap;
 }
-.mock-review > details[open] > summary svg {
+.mock-review-expand[aria-expanded="true"] svg {
   transform: rotate(180deg);
 }
-.mock-review summary small {
+.mock-review-expand small {
   margin-left: 7px;
   color: var(--mock-muted);
+}
+.mock-review-heading .retry-mark {
+  margin-right: 10px;
+  min-height: 36px;
+  font-size: 12px;
 }
 .mock-review-tabs {
   padding-inline: 15px;
@@ -696,5 +731,12 @@
   }
   .mock-number {
     min-width: 32px;
+  }
+  .mock-review-heading .retry-mark {
+    min-width: 36px;
+    margin-right: 8px;
+  }
+  .mock-review-heading .retry-mark span {
+    display: none;
   }
 }
